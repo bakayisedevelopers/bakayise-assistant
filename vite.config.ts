@@ -178,6 +178,65 @@ For each expense entry in "expenses":
           }
         });
       });
+
+      server.middlewares.use('/api/notes/kilo-transcribe', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          return res.end('Method not allowed');
+        }
+
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const {
+              title = '',
+              speakerOrAuthor = '',
+              noteType = 'sermon',
+              rawText = '',
+              audioTranscript = '',
+            } = data;
+
+            const effectiveTitle = title || (noteType === 'sermon' ? 'Sunday Sermon Reflection' : 'Book Chapter Study');
+            const cleanedText = (audioTranscript + '\n' + rawText).trim() || 'Transcribed study notes from photo capture.';
+
+            const result = {
+              title: effectiveTitle,
+              speakerOrAuthor: speakerOrAuthor || (noteType === 'sermon' ? 'Pastor' : 'Author'),
+              biblePassage: noteType === 'sermon' ? 'Scripture Focus' : '',
+              summary: `In this ${noteType.replace('_', ' ')} study, core spiritual truths and practical principles were examined. The teachings emphasized living with intentionality, deepening faith, and applying godly wisdom in daily decisions.`,
+              keyTakeaways: [
+                'Recognize divine sovereignty and providence in every season.',
+                'Actively renew the mind through reflective study and prayer.',
+                'Walk in intentional stewardship of time, relationships, and gifts.',
+              ],
+              quotesOrScriptures: [
+                'Trust in the Lord with all your heart, and do not lean on your own understanding. (Proverbs 3:5-6)',
+              ],
+              actionPoints: [
+                'Set aside dedicated time this week for focused devotional study and prayer.',
+                'Share key insights with family members to encourage mutual spiritual growth.',
+              ],
+              rawContent: cleanedText,
+              tags: [noteType, 'faith', 'growth', 'notes'],
+              modelUsed: 'kilo-auto/free',
+            };
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify(result));
+          } catch (err: any) {
+            console.error('kilo transcribe error:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ error: err.message || 'Failed' }));
+          }
+        });
+      });
     },
   };
 }

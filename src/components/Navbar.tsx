@@ -72,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onBackToAssistantHub}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-medium transition cursor-pointer"
-                title="Return to Bakayise Assistant Apps Hub"
+                title="Return to Apps Hub"
               >
                 <Grid className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">Hub</span>
@@ -83,7 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap">
-                Bakayise Budget
+                Budget
               </span>
               <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-[6px] text-[10px] font-semibold bg-white/10 text-emerald-300 border border-white/10 whitespace-nowrap">
                 ZAR · SA
@@ -113,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         {statusLabel}
                       </div>
                       <div className="text-[9px] text-slate-400 truncate">
-                        Step {currentStep} · Bakayise Budget
+                        Step {currentStep} · Budget
                       </div>
                     </div>
                   </div>

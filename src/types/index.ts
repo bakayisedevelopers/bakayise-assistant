@@ -321,6 +321,9 @@ export interface AssistantApp {
   category?: string;
   status?: 'active' | 'coming_soon' | 'in_development';
   route?: string;
+  dataPath?: string;
+  aiModel?: string;
+  features?: string[];
 }
 
 export interface GlobalUser {
@@ -333,5 +336,54 @@ export interface GlobalUser {
   lastLoginAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type NoteType = 'sermon' | 'book' | 'bible_study' | 'general';
+export type NoteInputMethod = 'manual' | 'camera_ocr' | 'mic_recording' | 'system_audio';
+
+export interface BookProgress {
+  currentPage?: number;
+  totalPages?: number;
+  chapter?: string;
+  completed?: boolean;
+}
+
+export interface NoteItem {
+  id: string;
+  title: string;
+  type: NoteType;
+  sourceTitle?: string; // Book title, church name, series
+  speakerOrAuthor?: string; // Pastor, author
+  biblePassage?: string; // Scripture reference (e.g. Romans 8:28)
+  date: string; // YYYY-MM-DD
+  rawContent: string; // Transcribed text from pictures, audio, or manual entry
+  summary: string; // Structured AI summary
+  keyTakeaways: string[]; // Core takeaway bullet points
+  quotesOrScriptures?: string[]; // Memorable quotes or cited verses
+  actionPoints?: string[]; // Practical life applications / reflections
+  tags: string[];
+  inputMethod: NoteInputMethod;
+  readingProgress?: BookProgress;
+  workspaceId: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  modelUsed?: string; // 'kilo-auto/free'
+}
+
+export interface WeeklySummary {
+  id: string;
+  weekNumber: number;
+  year: number;
+  startDate: string;
+  endDate: string;
+  title: string;
+  summary: string;
+  notesCount: number;
+  keyThemes: string[];
+  scriptureHighlights?: string[];
+  workspaceId: string;
+  createdAt: string;
 }
 

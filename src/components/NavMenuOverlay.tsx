@@ -196,7 +196,7 @@ export const NavMenuOverlay: React.FC<NavMenuOverlayProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg text-white tracking-tight">Bakayise Budget</h3>
+                <h3 className="font-bold text-lg text-white tracking-tight">Budget</h3>
                 <span className="px-1.5 py-0.5 rounded-[6px] text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   ZAR · SA
                 </span>

@@ -95,6 +95,7 @@ import { WorkspaceGatekeeperModal } from './components/modals/WorkspaceGatekeepe
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { GoogleAuthScreen } from './components/auth/GoogleAuthScreen';
 import { AssistantHub } from './components/AssistantHub';
+import { NotesApp } from './components/notes/NotesApp';
 
 import {
   Loader2,
@@ -1725,6 +1726,7 @@ function AssistantAppRouter() {
       const path = window.location.pathname.replace(/^\/+/, '');
       const hash = window.location.hash.replace(/^#\/?/, '');
       if (path === 'budget' || hash === 'budget') return 'budget';
+      if (path === 'notes' || hash === 'notes') return 'notes';
     } catch {
       // safe fallback
     }
@@ -1740,6 +1742,8 @@ function AssistantAppRouter() {
         const hash = window.location.hash.replace(/^#\/?/, '');
         if (path === 'budget' || hash === 'budget') {
           setActiveAppId('budget');
+        } else if (path === 'notes' || hash === 'notes') {
+          setActiveAppId('notes');
         } else {
           setActiveAppId(null);
         }
@@ -1785,6 +1789,10 @@ function AssistantAppRouter() {
 
   if (activeAppId === 'budget') {
     return <BakayiseAppContent onBackToAssistantHub={handleBackToHub} />;
+  }
+
+  if (activeAppId === 'notes') {
+    return <NotesApp onBackToAssistantHub={handleBackToHub} />;
   }
 
   return <AssistantHub onLaunchApp={handleLaunchApp} />;

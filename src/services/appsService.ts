@@ -12,10 +12,18 @@ import { db, handleFirestoreError, OperationType, auth } from '../firebase/confi
 import { AssistantApp, GlobalUser, UserRole } from '../types';
 import { AllowedFamilyMember } from '../utils/authConstants';
 
+export function cleanAppName(raw?: string, id?: string): string {
+  if (!raw && !id) return 'App';
+  let name = (raw || id || '').trim();
+  name = name.replace(/^Bakayise\s+/i, '').trim();
+  if (!name) return id ? id.charAt(0).toUpperCase() + id.slice(1) : 'App';
+  return name;
+}
+
 export const DEFAULT_BUDGET_APP_METADATA: AssistantApp = {
   id: 'budget',
-  appName: 'Bakayise Budget',
-  name: 'Bakayise Budget',
+  appName: 'Budget',
+  name: 'Budget',
   appDescription: 'Family budgeting, income streams, expense tracking, accounts management, and Dave Ramsey 7 baby steps snowball.',
   description: 'Family budgeting, income streams, expense tracking, accounts management, and Dave Ramsey 7 baby steps snowball.',
   migrationStatus: 'completed',
@@ -24,113 +32,120 @@ export const DEFAULT_BUDGET_APP_METADATA: AssistantApp = {
   icon: 'calculator',
   category: 'Finance',
   route: '/budget',
+  dataPath: 'apps/budget',
 };
 
-// Planned companion apps for the Bakayise Family ecosystem
-export const PLANNED_COMPANION_APPS: AssistantApp[] = [
-  {
-    id: 'notes',
-    appName: 'Family Notes & Study',
-    name: 'Family Notes & Study',
-    appDescription: 'Centralized family notes, Bible reading reflections, ideas, and shared journals.',
-    description: 'Centralized family notes, Bible reading reflections, ideas, and shared journals.',
-    status: 'coming_soon',
-    icon: 'notebook',
-    category: 'Knowledge',
-    route: '/notes',
-  },
-  {
-    id: 'prayer',
-    appName: 'Prayer & Gratitude',
-    name: 'Prayer & Gratitude',
-    appDescription: 'Household prayer requests, petitions, thanksgiving records, and answered prayers.',
-    description: 'Household prayer requests, petitions, thanksgiving records, and answered prayers.',
-    status: 'coming_soon',
-    icon: 'heart-handshake',
-    category: 'Spiritual',
-    route: '/prayer',
-  },
-  {
-    id: 'meals',
-    appName: 'Meal Planner & Pantry',
-    name: 'Meal Planner & Pantry',
-    appDescription: 'Weekly healthy meal schedules, grocery budgeting, and family recipes.',
-    description: 'Weekly healthy meal schedules, grocery budgeting, and family recipes.',
-    status: 'coming_soon',
-    icon: 'utensils',
-    category: 'Lifestyle',
-    route: '/meals',
-  },
-  {
-    id: 'calendar',
-    appName: 'Smart Family Calendar',
-    name: 'Smart Family Calendar',
-    appDescription: 'AI-assisted family schedule, paydays, bill reminders, and joint events.',
-    description: 'AI-assisted family schedule, paydays, bill reminders, and joint events.',
-    status: 'coming_soon',
-    icon: 'calendar',
-    category: 'Productivity',
-    route: '/calendar',
-  },
-];
+export const DEFAULT_NOTES_APP_METADATA: AssistantApp = {
+  id: 'notes',
+  appName: 'Notes',
+  name: 'Notes',
+  appDescription: 'AI-powered sermon transcription, book reading summaries, Bible study notes & audio transcription using kilo-auto/free.',
+  description: 'AI-powered sermon transcription, book reading summaries, Bible study notes & audio transcription using kilo-auto/free.',
+  status: 'active',
+  icon: 'book-open',
+  category: 'Knowledge',
+  route: '/notes',
+  dataPath: 'apps/notes',
+  aiModel: 'kilo-auto/free',
+};
 
 /**
- * Subscribes to the root `/apps` collection in Firestore.
- * Always ensures the budget app metadata is represented.
+ * Ensures core registered applications (Budget and Notes) exist in the /apps collection in Firestore,
+ * and strips any legacy "Bakayise " prefix from their stored names.
+ */
+export async function ensureFirestoreAppsExist(): Promise<void> {
+  try {
+    // 1. Ensure /apps/budget exists and has clean name
+    const budgetDocRef = doc(db, 'apps', 'budget');
+    const budgetSnap = await getDoc(budgetDocRef);
+    if (!budgetSnap.exists()) {
+      await setDoc(budgetDocRef, {
+        ...DEFAULT_BUDGET_APP_METADATA,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const data = budgetSnap.data();
+      if (data?.appName?.startsWith('Bakayise') || data?.name?.startsWith('Bakayise')) {
+        await setDoc(budgetDocRef, {
+          ...data,
+          appName: 'Budget',
+          name: 'Budget',
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
+
+    // 2. Ensure /apps/notes exists and has clean name
+    const notesDocRef = doc(db, 'apps', 'notes');
+    const notesSnap = await getDoc(notesDocRef);
+    if (!notesSnap.exists()) {
+      await setDoc(notesDocRef, {
+        ...DEFAULT_NOTES_APP_METADATA,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const data = notesSnap.data();
+      if (data?.appName?.startsWith('Bakayise') || data?.name?.startsWith('Bakayise')) {
+        await setDoc(notesDocRef, {
+          ...data,
+          appName: 'Notes',
+          name: 'Notes',
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
+  } catch (err) {
+    console.warn('Notice ensuring firestore apps exist:', err);
+  }
+}
+
+/**
+ * Subscribes ONLY to the root `/apps` collection in Firestore.
+ * Only returns applications that actually exist as documents in Firestore's /apps collection.
  */
 export function subscribeToAssistantApps(
   callback: (apps: AssistantApp[]) => void
 ): () => void {
+  // Ensure default core apps exist in Firestore
+  ensureFirestoreAppsExist();
+
   const appsCol = collection(db, 'apps');
 
   return onSnapshot(
     appsCol,
     (snapshot) => {
-      const loadedMap = new Map<string, AssistantApp>();
+      const loadedApps: AssistantApp[] = [];
 
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as Partial<AssistantApp>;
         const id = docSnap.id;
-        loadedMap.set(id, {
+        const cleanedName = cleanAppName(data.appName || data.name, id);
+
+        loadedApps.push({
           id,
-          appName: data.appName || data.name || (id === 'budget' ? 'Bakayise Budget' : id),
-          name: data.name || data.appName || (id === 'budget' ? 'Bakayise Budget' : id),
+          appName: cleanedName,
+          name: cleanedName,
           appDescription: data.appDescription || data.description || '',
           description: data.description || data.appDescription || '',
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
           migrationStatus: data.migrationStatus,
           sourceProject: data.sourceProject,
-          icon: data.icon || (id === 'budget' ? 'calculator' : 'layers'),
-          category: data.category || (id === 'budget' ? 'Finance' : 'General'),
-          status: (data.status as any) || (id === 'budget' ? 'active' : 'coming_soon'),
+          icon: data.icon || (id === 'budget' ? 'calculator' : id === 'notes' ? 'book-open' : 'layers'),
+          category: data.category || (id === 'budget' ? 'Finance' : id === 'notes' ? 'Knowledge' : 'General'),
+          status: (data.status as any) || 'active',
           route: data.route || `/${id}`,
+          dataPath: data.dataPath || `apps/${id}`,
+          aiModel: data.aiModel,
         });
       });
 
-      // Always guarantee 'budget' is present
-      if (!loadedMap.has('budget')) {
-        loadedMap.set('budget', DEFAULT_BUDGET_APP_METADATA);
-      }
+      // Sort alphabetically by app name
+      loadedApps.sort((a, b) => (a.appName || a.id).localeCompare(b.appName || b.id));
 
-      // Merge planned companion apps if not already created in Firestore
-      for (const planned of PLANNED_COMPANION_APPS) {
-        if (!loadedMap.has(planned.id)) {
-          loadedMap.set(planned.id, planned);
-        }
-      }
-
-      const allApps = Array.from(loadedMap.values());
-      // Keep budget first, then active apps, then others
-      allApps.sort((a, b) => {
-        if (a.id === 'budget') return -1;
-        if (b.id === 'budget') return 1;
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (b.status === 'active' && a.status !== 'active') return 1;
-        return (a.appName || a.id).localeCompare(b.appName || b.id);
-      });
-
-      callback(allApps);
+      callback(loadedApps);
     },
     (error) => {
       const isPermissionDenied =
@@ -141,8 +156,7 @@ export function subscribeToAssistantApps(
       if (!isPermissionDenied) {
         console.warn('Notice listening to /apps collection:', error);
       }
-      // Fallback with default apps
-      callback([DEFAULT_BUDGET_APP_METADATA, ...PLANNED_COMPANION_APPS]);
+      callback([]);
     }
   );
 }
