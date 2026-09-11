@@ -10,22 +10,17 @@ import {
   Check,
   ExternalLink,
   AlertTriangle,
-  ArrowRight,
-  KeyRound,
 } from 'lucide-react';
-import { ALLOWED_EMAILS_MAP } from '../../utils/authConstants';
 
 export const GoogleAuthScreen: React.FC = () => {
   const {
     signInWithGoogle,
-    signInAsMember,
     blockedEmail,
     authError,
     isUnauthorizedDomain,
     clearBlockedState,
   } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [signingInMemberEmail, setSigningInMemberEmail] = useState<string | null>(null);
   const [copiedDomain, setCopiedDomain] = useState(false);
 
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -40,25 +35,12 @@ export const GoogleAuthScreen: React.FC = () => {
     }
   };
 
-  const handleMemberClick = async (email: string) => {
-    setSigningInMemberEmail(email);
-    try {
-      await signInAsMember(email);
-    } finally {
-      setSigningInMemberEmail(null);
-    }
-  };
-
   const handleCopyDomain = () => {
     if (!currentHost) return;
     navigator.clipboard.writeText(currentHost);
     setCopiedDomain(true);
     setTimeout(() => setCopiedDomain(false), 2500);
   };
-
-  const allowedMembers = Object.values(ALLOWED_EMAILS_MAP).filter(
-    (m, idx, self) => self.findIndex((s) => s.email === m.email) === idx
-  );
 
   return (
     <div className="min-h-screen bg-[#0C0C0E] text-slate-100 flex flex-col justify-center items-center px-4 py-8 selection:bg-emerald-500 selection:text-black">
@@ -271,73 +253,10 @@ export const GoogleAuthScreen: React.FC = () => {
               </button>
             </div>
 
-            {/* QUICK FAMILY MEMBER ACCESS SECTION */}
-            <div className="pt-4 border-t border-white/[0.08] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-xs font-semibold text-slate-200">
-                    Quick Family Access
-                  </span>
-                </div>
-                <span className="text-[10px] text-emerald-400 font-medium">
-                  1-Click Entry
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-normal">
-                Select your whitelisted family account to enter directly without being blocked by OAuth domain restrictions:
-              </p>
-
-              <div className="space-y-2">
-                {allowedMembers.map((m) => {
-                  const isPending = signingInMemberEmail === m.email;
-                  return (
-                    <button
-                      key={m.email}
-                      onClick={() => handleMemberClick(m.email)}
-                      disabled={Boolean(signingInMemberEmail)}
-                      className="w-full p-3 rounded-[16px] bg-[#1F1F22] hover:bg-[#252529] border border-white/10 hover:border-emerald-500/40 text-left transition flex items-center justify-between group cursor-pointer disabled:opacity-50"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border border-white/10"
-                          style={{ backgroundColor: `${m.avatarColor}25`, color: m.avatarColor }}
-                        >
-                          {m.displayName.charAt(0)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <span>{m.displayName}</span>
-                            <span className="text-[10px] font-normal text-slate-400">({m.role})</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono truncate">
-                            {m.email}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 group-hover:text-emerald-400 transition shrink-0 pl-2">
-                        {isPending ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                        ) : (
-                          <>
-                            <span className="hidden sm:inline text-[11px]">Enter</span>
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-1.5 justify-center pt-2 text-[11px] text-slate-500">
-                <Lock className="w-3 h-3 text-slate-400" />
-                <span>Restricted to authorized Bakayise family members only</span>
-              </div>
+            <div className="flex items-center gap-1.5 justify-center pt-2 text-[11px] text-slate-500">
+              <Lock className="w-3.5 h-3.5 text-emerald-400/80" />
+              <span>Restricted to authorized Bakayise family members</span>
             </div>
-
           </div>
         )}
 

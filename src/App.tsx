@@ -96,6 +96,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { GoogleAuthScreen } from './components/auth/GoogleAuthScreen';
 import { AssistantHub } from './components/AssistantHub';
 import { NotesApp } from './components/notes/NotesApp';
+import { MealPlannerApp } from './components/meals/MealPlannerApp';
 
 import {
   Loader2,
@@ -1727,6 +1728,7 @@ function AssistantAppRouter() {
       const hash = window.location.hash.replace(/^#\/?/, '');
       if (path === 'budget' || hash === 'budget') return 'budget';
       if (path === 'notes' || hash === 'notes') return 'notes';
+      if (path === 'meal_planner' || hash === 'meal_planner' || path === 'meals' || hash === 'meals') return 'meal_planner';
     } catch {
       // safe fallback
     }
@@ -1744,6 +1746,8 @@ function AssistantAppRouter() {
           setActiveAppId('budget');
         } else if (path === 'notes' || hash === 'notes') {
           setActiveAppId('notes');
+        } else if (path === 'meal_planner' || hash === 'meal_planner' || path === 'meals' || hash === 'meals') {
+          setActiveAppId('meal_planner');
         } else {
           setActiveAppId(null);
         }
@@ -1793,6 +1797,10 @@ function AssistantAppRouter() {
 
   if (activeAppId === 'notes') {
     return <NotesApp onBackToAssistantHub={handleBackToHub} />;
+  }
+
+  if (activeAppId === 'meal_planner' || activeAppId === 'meals') {
+    return <MealPlannerApp onBackToHub={handleBackToHub} />;
   }
 
   return <AssistantHub onLaunchApp={handleLaunchApp} />;

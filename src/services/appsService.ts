@@ -49,8 +49,29 @@ export const DEFAULT_NOTES_APP_METADATA: AssistantApp = {
   aiModel: 'kilo-auto/free',
 };
 
+export const DEFAULT_MEAL_PLANNER_APP_METADATA: AssistantApp = {
+  id: 'meal_planner',
+  appName: 'Meal Planner',
+  name: 'Meal Planner',
+  appDescription: 'AI-powered family meal planning, weekly schedules, tailored recipes based on family dietary profile, pantry items & budget.',
+  description: 'AI-powered family meal planning, weekly schedules, tailored recipes based on family dietary profile, pantry items & budget.',
+  status: 'active',
+  icon: 'utensils',
+  category: 'Lifestyle',
+  route: '/meal_planner',
+  dataPath: 'apps/meal_planner',
+  aiModel: 'gemini-3.1-flash-lite',
+  features: [
+    'AI Meal Generator tailored to family dietary goals, budget & pantry items',
+    '7-Day Weekly Meal Planning Calendar',
+    'Pantry & Fridge Inventory Tracker',
+    'Consolidated Interactive Grocery Shopping List',
+    'Step-by-Step Recipes with Nutritional Information (Calories, Protein, Carbs, Fats)',
+  ],
+};
+
 /**
- * Ensures core registered applications (Budget and Notes) exist in the /apps collection in Firestore,
+ * Ensures core registered applications (Budget, Notes, and Meal Planner) exist in the /apps collection in Firestore,
  * and strips any legacy "Bakayise " prefix from their stored names.
  */
 export async function ensureFirestoreAppsExist(): Promise<void> {
@@ -92,6 +113,27 @@ export async function ensureFirestoreAppsExist(): Promise<void> {
           ...data,
           appName: 'Notes',
           name: 'Notes',
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
+
+    // 3. Ensure /apps/meal_planner exists and has clean name
+    const mealDocRef = doc(db, 'apps', 'meal_planner');
+    const mealSnap = await getDoc(mealDocRef);
+    if (!mealSnap.exists()) {
+      await setDoc(mealDocRef, {
+        ...DEFAULT_MEAL_PLANNER_APP_METADATA,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const data = mealSnap.data();
+      if (data?.appName?.startsWith('Bakayise') || data?.name?.startsWith('Bakayise')) {
+        await setDoc(mealDocRef, {
+          ...data,
+          appName: 'Meal Planner',
+          name: 'Meal Planner',
           updatedAt: new Date().toISOString(),
         }, { merge: true });
       }

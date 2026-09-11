@@ -194,9 +194,94 @@
         "notes": { "type": "string", "maxLength": 1000 }
       },
       "required": ["id", "title", "archivedAt", "archivedBy", "householdId"]
+    },
+    "MealItem": {
+      "title": "MealItem",
+      "description": "Recipe or meal entry in family library or plan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "enum": ["breakfast", "lunch", "dinner", "snack", "dessert"], "maxLength": 32 },
+        "cuisine": { "type": "string", "maxLength": 64 },
+        "prepTimeMinutes": { "type": "number" },
+        "cookTimeMinutes": { "type": "number" },
+        "servings": { "type": "number" },
+        "estimatedCostZAR": { "type": "number" },
+        "workspaceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "title", "type", "workspaceId"]
+    },
+    "MealPlan": {
+      "title": "MealPlan",
+      "description": "Weekly meal plan with day slots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "weekStartDate": { "type": "string", "maxLength": 32 },
+        "title": { "type": "string", "maxLength": 128 },
+        "workspaceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "weekStartDate", "workspaceId"]
+    },
+    "PantryItem": {
+      "title": "PantryItem",
+      "description": "Ingredient in family pantry or fridge inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 32 },
+        "inStock": { "type": "boolean" },
+        "expiryDate": { "type": "string", "maxLength": 32 },
+        "workspaceId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "category", "inStock", "workspaceId"]
+    },
+    "ShoppingListItem": {
+      "title": "ShoppingListItem",
+      "description": "Grocery shopping list item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "quantity": { "type": "string", "maxLength": 32 },
+        "unit": { "type": "string", "maxLength": 32 },
+        "checked": { "type": "boolean" },
+        "estimatedPriceZAR": { "type": "number" },
+        "workspaceId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "checked", "workspaceId"]
     }
   },
   "firestore": {
+    "/apps/meal_planner": {
+      "description": "Meal planner app metadata and configuration"
+    },
+    "/apps/meal_planner/meals/{mealId}": {
+      "schema": { "$ref": "#/entities/MealItem" },
+      "description": "Saved family meals and recipes"
+    },
+    "/apps/meal_planner/plans/{planId}": {
+      "schema": { "$ref": "#/entities/MealPlan" },
+      "description": "Weekly meal plans"
+    },
+    "/apps/meal_planner/pantry/{itemId}": {
+      "schema": { "$ref": "#/entities/PantryItem" },
+      "description": "Family pantry inventory items"
+    },
+    "/apps/meal_planner/shopping_list/{itemId}": {
+      "schema": { "$ref": "#/entities/ShoppingListItem" },
+      "description": "Grocery shopping list items"
+    },
     "/user_profiles/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Registered family user profiles"

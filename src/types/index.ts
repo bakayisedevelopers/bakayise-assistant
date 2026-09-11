@@ -303,6 +303,10 @@ export interface UserProfile extends EditAuditInfo {
   defaultWorkspaceId?: string;
   linkedUserIds?: string[];
   avatarColor?: string;
+  phoneNumber?: string;
+  titleOrMotto?: string;
+  bio?: string;
+  themePreference?: 'dark' | 'light' | 'system';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -338,7 +342,7 @@ export interface GlobalUser {
   updatedAt?: string;
 }
 
-export type NoteType = 'sermon' | 'book' | 'bible_study' | 'general';
+export type NoteType = 'book' | 'sermon' | 'bible_study' | 'normal' | 'general';
 export type NoteInputMethod = 'manual' | 'camera_ocr' | 'mic_recording' | 'system_audio';
 
 export interface BookProgress {
@@ -370,6 +374,22 @@ export interface NoteItem {
   createdAt: string;
   updatedAt: string;
   modelUsed?: string; // 'kilo-auto/free'
+
+  // Books: multiple chapter note entries belong to a book & chapter
+  bookTitle?: string;
+  chapter?: string;
+  pageRange?: string;
+
+  // Sermons: can belong to a sermon series or be standalone
+  seriesName?: string;
+  sermonTitle?: string;
+
+  // Bible Study: belongs to a dynamic book of the Bible
+  bibleBook?: string;
+  bibleChapter?: string;
+
+  // Normal Notes & future life categories (Vision for Family, Life goals, etc.)
+  categoryName?: string;
 }
 
 export interface WeeklySummary {
@@ -386,4 +406,146 @@ export interface WeeklySummary {
   workspaceId: string;
   createdAt: string;
 }
+
+// -------------------------------------------------------------
+// MEAL PLANNER TYPES
+// -------------------------------------------------------------
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'dessert';
+
+export type DietaryPreference =
+  | 'balanced'
+  | 'high_protein'
+  | 'low_carb'
+  | 'keto'
+  | 'vegetarian'
+  | 'vegan'
+  | 'halal'
+  | 'kosher'
+  | 'gluten_free'
+  | 'dairy_free'
+  | 'budget_friendly'
+  | 'quick_prep';
+
+export type PantryCategory =
+  | 'produce'
+  | 'meat_protein'
+  | 'dairy_eggs'
+  | 'grains_pantry'
+  | 'spices_sauces'
+  | 'frozen'
+  | 'beverages'
+  | 'other';
+
+export interface MealIngredient {
+  id: string;
+  name: string;
+  amount: string | number;
+  unit: string;
+  category?: PantryCategory | string;
+  inPantry?: boolean;
+}
+
+export interface MealNutrition {
+  calories?: number;
+  protein?: number; // grams
+  carbs?: number; // grams
+  fats?: number; // grams
+}
+
+export interface MealItem {
+  id: string;
+  title: string;
+  description: string;
+  type: MealType;
+  cuisine?: string;
+  prepTimeMinutes: number;
+  cookTimeMinutes: number;
+  servings: number;
+  estimatedCostZAR?: number;
+  ingredients: MealIngredient[];
+  instructions: string[];
+  nutrition?: MealNutrition;
+  tags: string[];
+  isFavorite?: boolean;
+  source?: 'ai_suggested' | 'family_recipe' | 'custom';
+  whySuggested?: string;
+  pantryMatchPercentage?: number;
+  imageOrEmoji?: string;
+  workspaceId: string;
+  authorId?: string;
+  authorName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DayOfWeek =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
+export interface MealPlanSlot {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  date?: string; // YYYY-MM-DD
+  type: MealType;
+  mealId?: string;
+  mealTitle?: string;
+  meal?: MealItem;
+  notes?: string;
+}
+
+export interface MealPlan {
+  id: string;
+  weekStartDate: string; // YYYY-MM-DD
+  title: string;
+  slots: MealPlanSlot[];
+  workspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PantryItem {
+  id: string;
+  name: string;
+  category: PantryCategory;
+  quantity: number;
+  unit: string;
+  inStock: boolean;
+  expiryDate?: string;
+  notes?: string;
+  workspaceId: string;
+  updatedAt: string;
+}
+
+export interface ShoppingListItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: string | number;
+  unit: string;
+  checked: boolean;
+  estimatedPriceZAR?: number;
+  sourceMealTitle?: string;
+  workspaceId: string;
+  createdAt: string;
+}
+
+export interface FamilyMealPreferences {
+  id: string;
+  householdMembersCount: number;
+  dietaryGoals: DietaryPreference[];
+  allergiesAndDislikes: string[];
+  favoriteIngredients: string[];
+  maxPrepTimeMinutes: number;
+  weeklyFoodBudgetZAR?: number;
+  cuisinePreferences: string[];
+  workspaceId: string;
+  updatedAt: string;
+}
+
 

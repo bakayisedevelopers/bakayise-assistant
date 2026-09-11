@@ -5,7 +5,6 @@ import {
   Camera,
   Mic,
   Volume2,
-  FileText,
   Sparkles,
   Loader2,
   Trash2,
@@ -18,10 +17,15 @@ import {
   AlertCircle,
   Radio,
   Square,
-  ShieldCheck,
   Tag,
   Upload,
-  Info,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
+  Check,
+  Calendar,
+  FileText,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { processNotesWithKilo, KILO_MODEL_NAME } from '../../services/kiloAIService';
 import {
@@ -40,6 +44,12 @@ interface NoteModalProps {
   workspaceId: string;
   authorId: string;
   authorName: string;
+  existingNotes?: NoteItem[];
+  prefilledType?: NoteType;
+  prefilledBookTitle?: string;
+  prefilledSeriesName?: string;
+  prefilledBibleBook?: string;
+  prefilledCategoryName?: string;
 }
 
 export const NoteModal: React.FC<NoteModalProps> = ({
@@ -50,14 +60,34 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   workspaceId,
   authorId,
   authorName,
+  existingNotes = [],
+  prefilledType,
+  prefilledBookTitle,
+  prefilledSeriesName,
+  prefilledBibleBook,
+  prefilledCategoryName,
 }) => {
-  const [activeTab, setActiveTab] = useState<'camera' | 'audio' | 'editor'>(
-    initialNote ? 'editor' : 'camera'
-  );
+  // High-level Note type: 'book' | 'sermon' | 'bible_study' | 'normal'
+  const [type, setType] = useState<NoteType>(prefilledType || 'book');
+
+  // Book fields: Multiple chapters notes entries belong to a book & chapter
+  const [bookTitle, setBookTitle] = useState(prefilledBookTitle || '');
+  const [chapter, setChapter] = useState('');
+  const [pageRange, setPageRange] = useState('');
+
+  // Sermon fields: sermon series, sermon titles, series or standalone
+  const [seriesName, setSeriesName] = useState(prefilledSeriesName || '');
+  const [sermonTitle, setSermonTitle] = useState('');
+
+  // Bible Study fields: dynamic book of the bible (not hardcoded), can select from list of books being studied
+  const [bibleBook, setBibleBook] = useState(prefilledBibleBook || '');
+  const [bibleChapter, setBibleChapter] = useState('');
+
+  // Normal / Life Notes: can be given any title, supports vision for family and other life notes
+  const [categoryName, setCategoryName] = useState(prefilledCategoryName || 'Vision for Family');
 
   // Note fields
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<NoteType>('sermon');
   const [sourceTitle, setSourceTitle] = useState('');
   const [speakerOrAuthor, setSpeakerOrAuthor] = useState('');
   const [biblePassage, setBiblePassage] = useState('');
@@ -68,19 +98,56 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   const [quotesOrScriptures, setQuotesOrScriptures] = useState<string[]>([]);
   const [actionPoints, setActionPoints] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
-  const [inputMethod, setInputMethod] = useState<NoteInputMethod>('camera_ocr');
+  const [inputMethod, setInputMethod] = useState<NoteInputMethod>('manual');
 
   // Book progress fields
   const [currentPage, setCurrentPage] = useState<number | ''>('');
   const [totalPages, setTotalPages] = useState<number | ''>('');
-  const [chapter, setChapter] = useState('');
   const [completed, setCompleted] = useState(false);
+
+  // Derive unique lists from workspace existing notes for quick autocomplete/selection
+  const existingBooks = React.useMemo(() => {
+    const list = existingNotes
+      .filter((n) => n.type === 'book')
+      .map((n) => n.bookTitle || n.sourceTitle || '')
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [existingNotes]);
+
+  const existingSeries = React.useMemo(() => {
+    const list = existingNotes
+      .filter((n) => n.type === 'sermon')
+      .map((n) => n.seriesName || (n.sourceTitle && !n.sourceTitle.toLowerCase().includes('sunday') ? n.sourceTitle : ''))
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [existingNotes]);
+
+  const existingBibleBooks = React.useMemo(() => {
+    const list = existingNotes
+      .filter((n) => n.type === 'bible_study')
+      .map((n) => n.bibleBook || n.sourceTitle || '')
+      .filter(Boolean);
+    return Array.from(new Set(list));
+  }, [existingNotes]);
+
+  const existingCategories = React.useMemo(() => {
+    const defaults = ['Vision for Family', 'Personal Reflection', 'Life Goals', 'Prayer Points', 'Family Values'];
+    const custom = existingNotes
+      .filter((n) => n.type === 'normal' || n.type === 'general')
+      .map((n) => n.categoryName || '')
+      .filter(Boolean);
+    return Array.from(new Set([...defaults, ...custom]));
+  }, [existingNotes]);
 
   // New tag / takeaway input helpers
   const [newTakeaway, setNewTakeaway] = useState('');
   const [newQuote, setNewQuote] = useState('');
   const [newAction, setNewAction] = useState('');
   const [newTag, setNewTag] = useState('');
+
+  // UI state
+  const [showDetailsDrawer, setShowDetailsDrawer] = useState(false);
+  const [showAiSection, setShowAiSection] = useState(false);
 
   // Image capture state
   const [imageFiles, setImageFiles] = useState<{ id: string; name: string; dataUrl: string }[]>([]);
@@ -98,6 +165,7 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   const audioControllerRef = useRef<AudioCaptureController | null>(null);
   const speechRecognizerRef = useRef<{ stop: () => void } | null>(null);
   const timerIntervalRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // AI Loading state
   const [isProcessingAI, setIsProcessingAI] = useState(false);
@@ -107,7 +175,15 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   useEffect(() => {
     if (initialNote) {
       setTitle(initialNote.title || '');
-      setType(initialNote.type || 'sermon');
+      setType(initialNote.type || 'book');
+      setBookTitle(initialNote.bookTitle || (initialNote.type === 'book' ? initialNote.sourceTitle : '') || '');
+      setChapter(initialNote.chapter || initialNote.readingProgress?.chapter || '');
+      setPageRange(initialNote.pageRange || '');
+      setSeriesName(initialNote.seriesName || '');
+      setSermonTitle(initialNote.sermonTitle || (initialNote.type === 'sermon' ? initialNote.title : '') || '');
+      setBibleBook(initialNote.bibleBook || (initialNote.type === 'bible_study' ? initialNote.sourceTitle : '') || '');
+      setBibleChapter(initialNote.bibleChapter || initialNote.biblePassage || '');
+      setCategoryName(initialNote.categoryName || 'Vision for Family');
       setSourceTitle(initialNote.sourceTitle || '');
       setSpeakerOrAuthor(initialNote.speakerOrAuthor || '');
       setBiblePassage(initialNote.biblePassage || '');
@@ -121,13 +197,25 @@ export const NoteModal: React.FC<NoteModalProps> = ({
       setInputMethod(initialNote.inputMethod || 'manual');
       setCurrentPage(initialNote.readingProgress?.currentPage ?? '');
       setTotalPages(initialNote.readingProgress?.totalPages ?? '');
-      setChapter(initialNote.readingProgress?.chapter || '');
       setCompleted(initialNote.readingProgress?.completed || false);
-      setActiveTab('editor');
+      if (initialNote.summary || (initialNote.keyTakeaways && initialNote.keyTakeaways.length > 0)) {
+        setShowAiSection(true);
+      }
+      if (initialNote.speakerOrAuthor || initialNote.biblePassage || initialNote.readingProgress) {
+        setShowDetailsDrawer(true);
+      }
     } else {
       resetForm();
     }
-  }, [initialNote, isOpen]);
+  }, [
+    initialNote,
+    isOpen,
+    prefilledType,
+    prefilledBookTitle,
+    prefilledSeriesName,
+    prefilledBibleBook,
+    prefilledCategoryName,
+  ]);
 
   // Clean up recording on unmount or close
   useEffect(() => {
@@ -138,7 +226,15 @@ export const NoteModal: React.FC<NoteModalProps> = ({
 
   const resetForm = () => {
     setTitle('');
-    setType('sermon');
+    setType(prefilledType || 'book');
+    setBookTitle(prefilledBookTitle || '');
+    setChapter('');
+    setPageRange('');
+    setSeriesName(prefilledSeriesName || '');
+    setSermonTitle('');
+    setBibleBook(prefilledBibleBook || '');
+    setBibleChapter('');
+    setCategoryName(prefilledCategoryName || 'Vision for Family');
     setSourceTitle('');
     setSpeakerOrAuthor('');
     setBiblePassage('');
@@ -148,19 +244,20 @@ export const NoteModal: React.FC<NoteModalProps> = ({
     setKeyTakeaways([]);
     setQuotesOrScriptures([]);
     setActionPoints([]);
-    setTags(['sermon']);
-    setInputMethod('camera_ocr');
+    setTags(['notes']);
+    setInputMethod('manual');
     setCurrentPage('');
     setTotalPages('');
-    setChapter('');
     setCompleted(false);
     setImageFiles([]);
-    setActiveTab('camera');
+    setShowDetailsDrawer(false);
+    setShowAiSection(false);
     setLiveTranscript('');
     setAudioError(null);
+    setAudioNotice(null);
   };
 
-  // Image handling (Local in-memory data URLs, NO storage)
+  // Image handling (Local in-memory data URLs, NO cloud storage)
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -183,7 +280,6 @@ export const NoteModal: React.FC<NoteModalProps> = ({
       reader.readAsDataURL(file);
     });
 
-    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -207,14 +303,13 @@ export const NoteModal: React.FC<NoteModalProps> = ({
 
       if (fallbackToMic) {
         setAudioNotice(
-          'Tab audio sharing was cancelled or restricted in this window. Recording smoothly via ambient microphone instead.'
+          'Tab audio sharing was cancelled or restricted. Recording smoothly via ambient microphone instead.'
         );
       }
 
       audioControllerRef.current = controller;
       setIsRecording(true);
 
-      // Start live speech recognizer
       const recognizer = startLiveSpeechRecognition({
         onTranscript: (interim, final) => {
           setLiveTranscript((prev) => {
@@ -228,14 +323,13 @@ export const NoteModal: React.FC<NoteModalProps> = ({
       });
       speechRecognizerRef.current = recognizer;
 
-      // Start timer
       timerIntervalRef.current = setInterval(() => {
         setRecordSeconds((s) => s + 1);
       }, 1000);
     } catch (err: any) {
       console.warn('Audio recording could not start:', err?.message || err);
       setAudioError(
-        err?.message || 'Could not access audio device. Please grant microphone permissions.'
+        err?.message || 'Could not access microphone. Please check permissions.'
       );
       setIsRecording(false);
     }
@@ -306,9 +400,7 @@ export const NoteModal: React.FC<NoteModalProps> = ({
           const mergedTags = Array.from(new Set([...tags, ...result.tags]));
           setTags(mergedTags);
         }
-
-        // Switch to editor tab so user can review and save
-        setActiveTab('editor');
+        setShowAiSection(true);
       }
     } catch (err: any) {
       console.error('Error during kilo-auto/free processing:', err);
@@ -317,7 +409,7 @@ export const NoteModal: React.FC<NoteModalProps> = ({
     }
   };
 
-  // Add items
+  // Add items helpers
   const handleAddTakeaway = () => {
     if (newTakeaway.trim()) {
       setKeyTakeaways((prev) => [...prev, newTakeaway.trim()]);
@@ -352,15 +444,15 @@ export const NoteModal: React.FC<NoteModalProps> = ({
 
   // Final Save
   const handleSaveNote = async () => {
-    if (!title.trim()) {
-      setTitle(
-        type === 'sermon'
-          ? `Sermon on ${date}`
-          : type === 'book'
-          ? `Notes: ${sourceTitle || 'Book Study'}`
-          : `Note: ${date}`
-      );
-    }
+    const finalTitle =
+      title.trim() ||
+      (type === 'book'
+        ? (chapter.trim() ? `${bookTitle.trim() || 'Book'} - ${chapter.trim()}` : (bookTitle.trim() || `Book Reading · ${date}`))
+        : type === 'sermon'
+        ? (sermonTitle.trim() || (seriesName.trim() ? `${seriesName.trim()} Sermon` : `Sermon · ${date}`))
+        : type === 'bible_study'
+        ? (bibleBook.trim() ? `${bibleBook.trim()} ${bibleChapter.trim()}`.trim() : `Bible Study · ${date}`)
+        : `Note · ${date}`);
 
     setIsSaving(true);
     try {
@@ -375,12 +467,30 @@ export const NoteModal: React.FC<NoteModalProps> = ({
           : undefined;
 
       const noteToSave: NoteItem = {
-        id: initialNote ? initialNote.id : `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        title: title.trim() || 'Untitled Study Note',
+        id: initialNote
+          ? initialNote.id
+          : `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        title: finalTitle,
         type,
-        sourceTitle: sourceTitle.trim() || undefined,
+        bookTitle: type === 'book' ? bookTitle.trim() : undefined,
+        chapter: type === 'book' ? chapter.trim() : undefined,
+        pageRange: type === 'book' ? pageRange.trim() : undefined,
+        seriesName: type === 'sermon' ? seriesName.trim() : undefined,
+        sermonTitle: type === 'sermon' ? (sermonTitle.trim() || finalTitle) : undefined,
+        bibleBook: type === 'bible_study' ? bibleBook.trim() : undefined,
+        bibleChapter: type === 'bible_study' ? bibleChapter.trim() : undefined,
+        categoryName: (type === 'normal' || type === 'general') ? categoryName.trim() : undefined,
+        sourceTitle:
+          type === 'book'
+            ? (bookTitle.trim() || sourceTitle.trim())
+            : type === 'sermon'
+            ? (seriesName.trim() || sourceTitle.trim())
+            : type === 'bible_study'
+            ? (bibleBook.trim() || sourceTitle.trim())
+            : undefined,
         speakerOrAuthor: speakerOrAuthor.trim() || undefined,
-        biblePassage: biblePassage.trim() || undefined,
+        biblePassage:
+          (type === 'bible_study' ? bibleChapter.trim() : biblePassage.trim()) || undefined,
         date,
         rawContent: rawContent.trim(),
         summary: summary.trim(),
@@ -388,7 +498,12 @@ export const NoteModal: React.FC<NoteModalProps> = ({
         quotesOrScriptures: quotesOrScriptures.length > 0 ? quotesOrScriptures : undefined,
         actionPoints: actionPoints.length > 0 ? actionPoints : undefined,
         tags: tags.length > 0 ? tags : [type],
-        inputMethod,
+        inputMethod:
+          imageFiles.length > 0
+            ? 'camera_ocr'
+            : isRecording || liveTranscript
+            ? (audioSource === 'mic' ? 'mic_recording' : 'system_audio')
+            : 'manual',
         readingProgress,
         workspaceId,
         authorId,
@@ -416,836 +531,1064 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-[#13151d] border border-white/[0.12] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* HEADER */}
-        <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              {type === 'sermon' && <Church className="w-5 h-5" />}
-              {type === 'book' && <BookOpen className="w-5 h-5" />}
-              {type === 'bible_study' && <Cross className="w-5 h-5" />}
-              {type === 'general' && <Layers className="w-5 h-5" />}
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">
-                {initialNote ? 'Edit Study Note' : 'Capture New Note'}
-              </h2>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span className="text-emerald-400 font-mono">apps/notes/*</span>
-                <span>•</span>
-                <span className="flex items-center gap-1 text-teal-300">
-                  <Sparkles className="w-3 h-3" />
-                  kilo-auto/free AI Engine
-                </span>
-              </div>
-            </div>
-          </div>
-
+    <div className="fixed inset-0 z-50 bg-[#090b10] sm:bg-black/80 sm:backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 overflow-hidden">
+      {/* NATIVE-LIKE NOTE TAKING CONTAINER */}
+      <div className="w-full h-full sm:max-w-3xl sm:h-[90vh] bg-[#0c0e15] sm:border sm:border-white/[0.12] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden relative font-sans">
+        
+        {/* TOP BAR / NAVIGATION (iOS / Android Style) */}
+        <header className="px-3 sm:px-6 py-3 border-b border-white/[0.08] bg-[#0f121b]/95 backdrop-blur-xl flex items-center justify-between gap-2 shrink-0 z-20">
+          {/* Back Button */}
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
+            className="flex items-center gap-1 text-slate-300 hover:text-white px-2 py-1.5 -ml-1.5 rounded-xl hover:bg-white/[0.06] transition cursor-pointer text-xs font-semibold shrink-0"
           >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* INPUT METHOD NAVIGATION TABS */}
-        <div className="px-6 pt-3 pb-2 border-b border-white/[0.06] flex items-center gap-2 overflow-x-auto bg-[#101218]">
-          <button
-            onClick={() => setActiveTab('camera')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
-              activeTab === 'camera'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            <span>Multi-Page Camera / Photos</span>
-            {imageFiles.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500 text-black font-bold">
-                {imageFiles.length}
-              </span>
-            )}
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('audio')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
-              activeTab === 'audio'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-          >
-            <Mic className="w-4 h-4" />
-            <span>Dual Audio Recording</span>
-            {isRecording && (
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-            )}
-          </button>
+          {/* 4 HIGH-LEVEL NOTE TYPES */}
+          <div className="flex items-center bg-white/[0.05] p-0.5 rounded-full border border-white/[0.08] overflow-x-auto max-w-[280px] xs:max-w-none">
+            <button
+              onClick={() => setType('book')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                type === 'book'
+                  ? 'bg-teal-500 text-black font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3 h-3" />
+              <span>Book</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('editor')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
-              activeTab === 'editor'
-                ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Note Editor & AI Summary</span>
-          </button>
-        </div>
+            <button
+              onClick={() => setType('sermon')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                type === 'sermon'
+                  ? 'bg-emerald-500 text-black font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Church className="w-3 h-3" />
+              <span>Sermon</span>
+            </button>
 
-        {/* MODAL BODY */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
-          
-          {/* TAB 1: CAMERA & PHOTO CAPTURE */}
-          {activeTab === 'camera' && (
-            <div className="space-y-5">
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <div className="font-semibold text-emerald-300">
-                    Private In-Memory Image Transcription
-                  </div>
-                  <p className="text-slate-300 leading-relaxed">
-                    Upload pictures of book pages, sermon notepads, or study sheets. Images are processed directly into text and <strong>never saved to cloud storage</strong>.
-                  </p>
-                </div>
+            <button
+              onClick={() => setType('bible_study')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                type === 'bible_study'
+                  ? 'bg-cyan-500 text-black font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Cross className="w-3 h-3" />
+              <span>Bible Study</span>
+            </button>
+
+            <button
+              onClick={() => setType('normal')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                type === 'normal' || type === 'general'
+                  ? 'bg-indigo-500 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3 h-3" />
+              <span>Normal</span>
+            </button>
+          </div>
+
+          {/* Right Top Actions: AI Sparkle + Done/Save */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              onClick={handleProcessAI}
+              disabled={isProcessingAI || (!rawContent.trim() && imageFiles.length === 0 && !liveTranscript)}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer disabled:opacity-30 ${
+                isProcessingAI
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 animate-pulse'
+                  : 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 shadow-sm'
+              }`}
+              title="Run kilo-auto/free AI processing"
+            >
+              {isProcessingAI ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="hidden md:inline">Processing...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                  <span className="hidden md:inline">AI Summarize</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleSaveNote}
+              disabled={isSaving}
+              className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition shadow-md shadow-emerald-950/40 cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Done</span>
+                </>
+              )}
+            </button>
+          </div>
+        </header>
+
+        {/* SCROLLABLE BLANK CANVAS BODY */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-5 space-y-4 text-slate-100">
+
+          {/* DYNAMIC CONTEXT BAR ACCORDING TO HIGH-LEVEL NOTE TYPE */}
+          {type === 'book' && (
+            <div className="p-3.5 rounded-2xl bg-[#121520] border border-teal-500/20 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-teal-400">
+                <span className="flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Book Reading & Chapters
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Belongs to a book & chapter entry
+                </span>
               </div>
 
-              {/* Note Metadata Quick Selectors */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    What are you reading / capturing?
-                  </label>
-                  <select
-                    value={type}
-                    onChange={(e) => {
-                      const newT = e.target.value as NoteType;
-                      setType(newT);
-                      setInputMethod('camera_ocr');
-                    }}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="sermon">⛪ Church Sermon Notes</option>
-                    <option value="book">📖 Book Reading (Pages / Chapter)</option>
-                    <option value="bible_study">✝️ Bible Reading & Study</option>
-                    <option value="general">💡 General Insights & Journal</option>
-                  </select>
+              {/* Existing Books Quick Select Pills */}
+              {existingBooks.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-slate-400">Books read:</span>
+                  {existingBooks.map((bk) => (
+                    <button
+                      key={bk}
+                      type="button"
+                      onClick={() => setBookTitle(bk)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer border ${
+                        bookTitle === bk
+                          ? 'bg-teal-500 text-black font-semibold border-teal-400'
+                          : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] border-white/10'
+                      }`}
+                    >
+                      {bk}
+                    </button>
+                  ))}
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    {type === 'book' ? 'Book Title' : type === 'sermon' ? 'Church / Series Name' : 'Title / Context'}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Book Title */}
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Book Title
                   </label>
                   <input
                     type="text"
-                    value={sourceTitle}
-                    onChange={(e) => setSourceTitle(e.target.value)}
-                    placeholder={type === 'book' ? 'e.g. Mere Christianity' : 'e.g. Grace Fellowship Church'}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                    list="books-datalist"
+                    value={bookTitle}
+                    onChange={(e) => setBookTitle(e.target.value)}
+                    placeholder="e.g. Mere Christianity / Atomic Habits"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-teal-500/50 focus:outline-none"
                   />
-                </div>
-              </div>
-
-              {/* Drop / Upload Zone */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-white/15 hover:border-emerald-500/50 rounded-2xl p-6 sm:p-8 text-center bg-[#151720]/60 hover:bg-[#151720] transition cursor-pointer group"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  capture="environment"
-                  onChange={handleImageSelect}
-                  className="hidden"
-                />
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 group-hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 transition">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <h4 className="text-sm font-semibold text-white mb-1">
-                  Take or Upload Multi-Page Photos
-                </h4>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Click to choose 1 to 5+ pictures of consecutive book pages or church notes.
-                </p>
-              </div>
-
-              {/* Image Preview Thumbnails */}
-              {imageFiles.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-300">
-                      Captured Pages ({imageFiles.length})
-                    </span>
-                    <button
-                      onClick={() => setImageFiles([])}
-                      className="text-xs text-rose-400 hover:text-rose-300 transition"
-                    >
-                      Clear All Photos
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {imageFiles.map((img, idx) => (
-                      <div
-                        key={img.id}
-                        className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-[3/4]"
-                      >
-                        <img
-                          src={img.dataUrl}
-                          alt={img.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/70 text-[10px] font-bold text-white">
-                          Page {idx + 1}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeImage(img.id);
-                          }}
-                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600/80 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  <datalist id="books-datalist">
+                    {existingBooks.map((b) => (
+                      <option key={b} value={b} />
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Button */}
-              <div className="pt-2">
-                <button
-                  disabled={imageFiles.length === 0 || isProcessingAI}
-                  onClick={handleProcessAI}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer"
-                >
-                  {isProcessingAI ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Transcribing & Summarizing with kilo-auto/free...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 text-emerald-200" />
-                      <span>Transcribe & Summarize ({imageFiles.length} Pages)</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: DUAL AUDIO RECORDING */}
-          {activeTab === 'audio' && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <div className="font-semibold text-teal-300">
-                    Dual Audio Capture (Zero Cloud Storage)
-                  </div>
-                  <p className="text-slate-300 leading-relaxed">
-                    Record live sermons with your ambient microphone, or capture internal system audio while playing an audiobook or podcast on this device. Audio is transcribed in real time and never saved to cloud storage.
-                  </p>
-                </div>
-              </div>
-
-              {/* Audio Mode Switcher */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  disabled={isRecording}
-                  onClick={() => {
-                    setAudioSource('mic');
-                    setAudioError(null);
-                    setAudioNotice(null);
-                  }}
-                  className={`p-4 rounded-2xl border text-left transition cursor-pointer ${
-                    audioSource === 'mic'
-                      ? 'bg-teal-500/15 border-teal-500/40 text-white'
-                      : 'bg-[#181b24] border-white/10 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 font-semibold text-xs mb-1">
-                    <Mic className="w-4 h-4 text-teal-400" />
-                    <span>Mode 1: Ambient Microphone</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    For in-person sermons, church services, seminars, or reading out loud.
-                  </p>
-                </button>
-
-                <button
-                  disabled={isRecording}
-                  onClick={() => {
-                    setAudioSource('system');
-                    setAudioError(null);
-                    setAudioNotice(null);
-                  }}
-                  className={`p-4 rounded-2xl border text-left transition cursor-pointer ${
-                    audioSource === 'system'
-                      ? 'bg-teal-500/15 border-teal-500/40 text-white'
-                      : 'bg-[#181b24] border-white/10 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 font-semibold text-xs mb-1">
-                    <div className="flex items-center gap-2">
-                      <Volume2 className="w-4 h-4 text-cyan-400" />
-                      <span>Mode 2: System / Device Audio</span>
-                    </div>
-                    {!isSystemAudioSupported() && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25">
-                        Mic Fallback in Preview
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Captures audiobooks, YouTube sermons, or podcasts playing on this device.
-                    {!isSystemAudioSupported() && (
-                      <span className="block mt-1 text-[10px] text-slate-500">
-                        (Seamlessly records speaker sound via microphone in embedded view)
-                      </span>
-                    )}
-                  </p>
-                </button>
-              </div>
-
-              {/* Audio Notice Box */}
-              {audioNotice && (
-                <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-xs text-teal-300 flex items-start gap-2">
-                  <Info className="w-4 h-4 shrink-0 mt-0.5 text-teal-400" />
-                  <span>{audioNotice}</span>
-                </div>
-              )}
-
-              {/* Error Box */}
-              {audioError && (
-                <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{audioError}</span>
-                </div>
-              )}
-
-              {/* Active Recording Center */}
-              <div className="bg-[#151720] border border-white/10 rounded-2xl p-6 text-center space-y-4">
-                <div className="flex items-center justify-center gap-2">
-                  <span
-                    className={`w-3 h-3 rounded-full ${
-                      isRecording ? 'bg-red-500 animate-ping' : 'bg-slate-600'
-                    }`}
-                  />
-                  <span className="font-mono text-2xl font-bold text-white tracking-widest">
-                    {formatSeconds(recordSeconds)}
-                  </span>
+                  </datalist>
                 </div>
 
-                {/* Animated Audio Frequency Bars */}
-                <div className="h-10 flex items-end justify-center gap-1.5 px-4">
-                  {Array.from({ length: 24 }).map((_, i) => {
-                    const barHeight = isRecording
-                      ? Math.max(8, Math.min(40, (audioVolume * (i % 3 + 1)) / 3 + Math.random() * 10))
-                      : 6;
-                    return (
-                      <div
-                        key={i}
-                        className={`w-1.5 rounded-full transition-all duration-75 ${
-                          isRecording ? 'bg-teal-400' : 'bg-slate-700'
-                        }`}
-                        style={{ height: `${barHeight}px` }}
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* Main Toggle Button */}
-                <div className="pt-2">
-                  {!isRecording ? (
-                    <button
-                      onClick={startRecordingSession}
-                      className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-teal-950/60 inline-flex items-center gap-2 cursor-pointer transition"
-                    >
-                      <Radio className="w-4 h-4 text-teal-200" />
-                      <span>
-                        Start Recording ({audioSource === 'mic' ? 'Microphone' : 'System Audio'})
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={stopRecordingSession}
-                      className="px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-rose-950/60 inline-flex items-center gap-2 cursor-pointer transition animate-pulse"
-                    >
-                      <Square className="w-4 h-4 fill-white" />
-                      <span>Stop & Capture Transcription</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Live Transcript Preview */}
-              {liveTranscript && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-medium text-white">Live Transcription Preview:</span>
-                    <span className="font-mono text-[10px] text-teal-400">Auto-captured</span>
-                  </div>
-                  <div className="p-3.5 bg-black/40 border border-white/10 rounded-xl text-xs text-slate-200 leading-relaxed max-h-36 overflow-y-auto">
-                    {liveTranscript}
-                  </div>
-                </div>
-              )}
-
-              {/* Process Button */}
-              {liveTranscript && !isRecording && (
-                <button
-                  disabled={isProcessingAI}
-                  onClick={() => {
-                    setInputMethod(audioSource === 'mic' ? 'mic_recording' : 'system_audio');
-                    handleProcessAI();
-                  }}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-semibold text-xs tracking-wide shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer"
-                >
-                  {isProcessingAI ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Summarizing Transcript with kilo-auto/free...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 text-teal-200" />
-                      <span>Summarize Speech with kilo-auto/free</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: NOTE EDITOR & SUMMARY */}
-          {activeTab === 'editor' && (
-            <div className="space-y-6">
-              {/* Top Row: Note Type & Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Chapter Note Entry */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Category / Archetype
-                  </label>
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value as NoteType)}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="sermon">⛪ Church Sermon</option>
-                    <option value="book">📖 Book Reading</option>
-                    <option value="bible_study">✝️ Bible Study / Devotional</option>
-                    <option value="general">💡 General Insights</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Session Date
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Chapter Entry
                   </label>
                   <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                    type="text"
+                    value={chapter}
+                    onChange={(e) => setChapter(e.target.value)}
+                    placeholder="e.g. Chapter 8: The Great Sin"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-teal-500/50 focus:outline-none"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Input Source
-                  </label>
-                  <div className="px-3 py-2 bg-[#181b24] border border-white/10 rounded-xl text-xs text-slate-300 flex items-center gap-1.5">
-                    {inputMethod === 'camera_ocr' && <Camera className="w-3.5 h-3.5 text-emerald-400" />}
-                    {inputMethod === 'mic_recording' && <Mic className="w-3.5 h-3.5 text-teal-400" />}
-                    {inputMethod === 'system_audio' && <Volume2 className="w-3.5 h-3.5 text-cyan-400" />}
-                    {inputMethod === 'manual' && <FileText className="w-3.5 h-3.5 text-indigo-400" />}
-                    <span className="capitalize">{inputMethod.replace('_', ' ')}</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Title */}
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Note Title
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Unshakeable Faith in Trials"
-                  className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Conditional Source & Speaker info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    {type === 'sermon'
-                      ? 'Preacher / Speaker'
-                      : type === 'book'
-                      ? 'Book Author'
-                      : 'Author / Teacher'}
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Author
                   </label>
                   <input
                     type="text"
                     value={speakerOrAuthor}
                     onChange={(e) => setSpeakerOrAuthor(e.target.value)}
-                    placeholder={type === 'book' ? 'e.g. C.S. Lewis' : 'e.g. Pastor John'}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                    placeholder="e.g. C.S. Lewis"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-teal-500/50 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    {type === 'sermon'
-                      ? 'Church / Sermon Series'
-                      : type === 'book'
-                      ? 'Book Name'
-                      : 'Source Reference'}
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Pages (e.g. 108-118)
                   </label>
                   <input
                     type="text"
-                    value={sourceTitle}
-                    onChange={(e) => setSourceTitle(e.target.value)}
-                    placeholder={type === 'book' ? 'e.g. Mere Christianity' : 'e.g. Grace Fellowship Church'}
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                    value={pageRange}
+                    onChange={(e) => setPageRange(e.target.value)}
+                    placeholder="pp. 108-118"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-teal-500/50 focus:outline-none"
                   />
                 </div>
-              </div>
 
-              {/* Scripture Reference */}
-              {(type === 'sermon' || type === 'bible_study') && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Bible Passage(s)
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Reading Bookmark
                   </label>
-                  <input
-                    type="text"
-                    value={biblePassage}
-                    onChange={(e) => setBiblePassage(e.target.value)}
-                    placeholder="e.g. Romans 8:28-39 or Psalm 23"
-                    className="w-full bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-              )}
-
-              {/* Book Reading Progress */}
-              {type === 'book' && (
-                <div className="p-4 rounded-2xl bg-[#171922] border border-white/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                      Book Reading Bookmark
-                    </span>
-                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={completed}
-                        onChange={(e) => setCompleted(e.target.checked)}
-                        className="rounded accent-emerald-500"
-                      />
-                      <span>Finished Book</span>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div>
-                      <span className="text-[11px] text-slate-400 block mb-1">Current Page</span>
-                      <input
-                        type="number"
-                        value={currentPage}
-                        onChange={(e) =>
-                          setCurrentPage(e.target.value === '' ? '' : Number(e.target.value))
-                        }
-                        placeholder="e.g. 142"
-                        className="w-full bg-[#101218] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] text-slate-400 block mb-1">Total Pages</span>
-                      <input
-                        type="number"
-                        value={totalPages}
-                        onChange={(e) =>
-                          setTotalPages(e.target.value === '' ? '' : Number(e.target.value))
-                        }
-                        placeholder="e.g. 280"
-                        className="w-full bg-[#101218] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] text-slate-400 block mb-1">Chapter / Section</span>
-                      <input
-                        type="text"
-                        value={chapter}
-                        onChange={(e) => setChapter(e.target.value)}
-                        placeholder="e.g. Chapter 7"
-                        className="w-full bg-[#101218] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Raw Transcribed Content */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-medium text-slate-400">
-                    Transcribed Notes / Raw Reading Content
-                  </label>
-                  <button
-                    disabled={isProcessingAI || !rawContent.trim()}
-                    onClick={handleProcessAI}
-                    className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer disabled:opacity-40"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Re-summarize with kilo-auto/free</span>
-                  </button>
-                </div>
-                <textarea
-                  rows={4}
-                  value={rawContent}
-                  onChange={(e) => setRawContent(e.target.value)}
-                  placeholder="Paste or edit transcribed text here..."
-                  className="w-full bg-[#181b24] border border-white/10 rounded-xl p-3 text-xs text-slate-200 placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              {/* AI Structured Summary */}
-              <div>
-                <label className="block text-xs font-medium text-emerald-300 mb-1.5">
-                  AI Summary & Synthesis (kilo-auto/free)
-                </label>
-                <textarea
-                  rows={3}
-                  value={summary}
-                  onChange={(e) => setSummary(e.target.value)}
-                  placeholder="AI summary will appear here..."
-                  className="w-full bg-[#151a22] border border-emerald-500/20 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Key Takeaways */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-400">
-                  Key Takeaways
-                </label>
-                <div className="space-y-1.5">
-                  {keyTakeaways.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#181b24] text-xs text-slate-200 border border-white/5"
-                    >
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setKeyTakeaways((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        className="text-slate-500 hover:text-rose-400 shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={newTakeaway}
-                    onChange={(e) => setNewTakeaway(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddTakeaway()}
-                    placeholder="Add a key takeaway point..."
-                    className="flex-1 bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddTakeaway}
-                    className="px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Quotes / Scriptures */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-400">
-                  Quotes & Scriptures
-                </label>
-                <div className="space-y-1.5">
-                  {quotesOrScriptures.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#181b24] text-xs text-amber-200 border border-white/5 italic"
-                    >
-                      <span>{item}</span>
-                      <button
-                        onClick={() =>
-                          setQuotesOrScriptures((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        className="text-slate-500 hover:text-rose-400 shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={newQuote}
-                    onChange={(e) => setNewQuote(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddQuote()}
-                    placeholder="Add memorable scripture or quote..."
-                    className="flex-1 bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddQuote}
-                    className="px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Points */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-400">
-                  Practical Action Points / Life Application
-                </label>
-                <div className="space-y-1.5">
-                  {actionPoints.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#181b24] text-xs text-teal-200 border border-white/5"
-                    >
-                      <span>• {item}</span>
-                      <button
-                        onClick={() =>
-                          setActionPoints((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        className="text-slate-500 hover:text-rose-400 shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={newAction}
-                    onChange={(e) => setNewAction(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddAction()}
-                    placeholder="Add an application or prayer point..."
-                    className="flex-1 bg-[#181b24] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddAction}
-                    className="px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-400">
-                  Topic Tags
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {tags.map((t) => (
-                    <span
-                      key={t}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] text-xs text-slate-300 border border-white/10"
-                    >
-                      <Tag className="w-3 h-3 text-slate-400" />
-                      <span>{t}</span>
-                      <button
-                        onClick={() => removeTag(t)}
-                        className="hover:text-rose-400 cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
                   <div className="flex items-center gap-1.5">
                     <input
-                      type="text"
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                      placeholder="Add tag..."
-                      className="bg-[#181b24] border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white w-24"
+                      type="number"
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="Current"
+                      className="w-1/2 bg-[#181b26] border border-white/10 rounded-xl px-2 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
                     />
-                    <button
-                      type="button"
-                      onClick={handleAddTag}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
-                    >
-                      +
-                    </button>
+                    <span className="text-slate-500 text-xs">/</span>
+                    <input
+                      type="number"
+                      value={totalPages}
+                      onChange={(e) => setTotalPages(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="Total"
+                      className="w-1/2 bg-[#181b26] border border-white/10 rounded-xl px-2 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* FOOTER */}
-        <div className="px-6 py-4 border-t border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
-          <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Path: /apps/notes/notes/{initialNote ? initialNote.id : 'new'}</span>
+          {type === 'sermon' && (
+            <div className="p-3.5 rounded-2xl bg-[#121520] border border-emerald-500/20 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-emerald-400">
+                <span className="flex items-center gap-1.5">
+                  <Church className="w-3.5 h-3.5" />
+                  Sermon Notes & Series
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Series or standalone sermon
+                </span>
+              </div>
+
+              {/* Existing Sermon Series Quick Pills */}
+              {existingSeries.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-slate-400">Series:</span>
+                  {existingSeries.map((ser) => (
+                    <button
+                      key={ser}
+                      type="button"
+                      onClick={() => setSeriesName(ser)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer border ${
+                        seriesName === ser
+                          ? 'bg-emerald-500 text-black font-semibold border-emerald-400'
+                          : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] border-white/10'
+                      }`}
+                    >
+                      {ser}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSeriesName('')}
+                    className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer border ${
+                      seriesName === ''
+                        ? 'bg-slate-700 text-white font-medium border-slate-600'
+                        : 'bg-white/[0.04] text-slate-400 border-white/10'
+                    }`}
+                  >
+                    Standalone
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Sermon Series (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    list="series-datalist"
+                    value={seriesName}
+                    onChange={(e) => setSeriesName(e.target.value)}
+                    placeholder="e.g. Faith & Obedience Series (or leave empty)"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                  <datalist id="series-datalist">
+                    {existingSeries.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Preacher / Speaker
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerOrAuthor}
+                    onChange={(e) => setSpeakerOrAuthor(e.target.value)}
+                    placeholder="e.g. Pastor John Doe"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Scripture Passage Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={biblePassage}
+                    onChange={(e) => setBiblePassage(e.target.value)}
+                    placeholder="e.g. Romans 8:28-39"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'bible_study' && (
+            <div className="p-3.5 rounded-2xl bg-[#121520] border border-cyan-500/20 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-cyan-400">
+                <span className="flex items-center gap-1.5">
+                  <Cross className="w-3.5 h-3.5" />
+                  Bible Study
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Belongs to a dynamic Book of the Bible
+                </span>
+              </div>
+
+              {/* Dynamic List of Books Being Studied (NOT hardcoded) */}
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">Books studied:</span>
+                  {existingBibleBooks.length > 0 ? (
+                    existingBibleBooks.map((bb) => (
+                      <button
+                        key={bb}
+                        type="button"
+                        onClick={() => setBibleBook(bb)}
+                        className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer border ${
+                          bibleBook.toLowerCase() === bb.toLowerCase()
+                            ? 'bg-cyan-500 text-black font-semibold border-cyan-400'
+                            : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] border-white/10'
+                        }`}
+                      >
+                        {bb}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="text-[10px] text-slate-500 italic">
+                      Type any Bible book below (e.g. Romans, Genesis, Psalms)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Book of the Bible (Not hardcoded)
+                  </label>
+                  <input
+                    type="text"
+                    value={bibleBook}
+                    onChange={(e) => setBibleBook(e.target.value)}
+                    placeholder="e.g. Romans, James, Genesis..."
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Chapter & Verses
+                  </label>
+                  <input
+                    type="text"
+                    value={bibleChapter}
+                    onChange={(e) => setBibleChapter(e.target.value)}
+                    placeholder="e.g. Chapter 8:1-17"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(type === 'normal' || type === 'general') && (
+            <div className="p-3.5 rounded-2xl bg-[#121520] border border-indigo-500/20 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-indigo-400">
+                <span className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  Normal Notes & Life Categories
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Give any title · Supports vision for family and life notes
+                </span>
+              </div>
+
+              {/* Life Category Quick Chips */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">Category:</span>
+                {existingCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategoryName(cat)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer border ${
+                      categoryName === cat
+                        ? 'bg-indigo-500 text-white font-semibold border-indigo-400'
+                        : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] border-white/10'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Custom Category / Life Area
+                  </label>
+                  <input
+                    type="text"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    placeholder="e.g. Vision for Family, Financial Goals, Personal"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-indigo-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MAIN NOTE TITLE INPUT */}
+          <div className="space-y-1.5 pt-1">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={
+                type === 'book'
+                  ? chapter ? `${chapter} Summary / Insights...` : 'Chapter or Note Title...'
+                  : type === 'sermon'
+                  ? 'Sermon Title / Main Message...'
+                  : type === 'bible_study'
+                  ? 'Study Topic / Central Truth...'
+                  : 'Note Title (can be given any title)...'
+              }
+              className="w-full text-xl sm:text-2xl font-bold text-white placeholder:text-slate-600 bg-transparent border-0 focus:outline-none tracking-tight"
+            />
+
+            <div className="flex items-center justify-between text-xs text-slate-400 pb-1 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2 text-[11px]">
+                <span>{date}</span>
+                {type === 'book' && bookTitle && (
+                  <span className="text-teal-400">· {bookTitle}</span>
+                )}
+                {type === 'sermon' && seriesName && (
+                  <span className="text-emerald-400">· {seriesName}</span>
+                )}
+                {type === 'bible_study' && bibleBook && (
+                  <span className="text-cyan-400">· {bibleBook}</span>
+                )}
+                {(type === 'normal' || type === 'general') && categoryName && (
+                  <span className="text-indigo-400">· {categoryName}</span>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowDetailsDrawer((prev) => !prev)}
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition cursor-pointer"
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                <span>{showDetailsDrawer ? 'Hide Details' : 'More Details'}</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          {/* COLLAPSIBLE DETAILS DRAWER (Preacher, Passage, Book Pages) */}
+          {showDetailsDrawer && (
+            <div className="p-4 rounded-2xl bg-[#121520] border border-white/[0.08] space-y-3.5 animate-fadeIn">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    {type === 'sermon' ? 'Preacher / Speaker' : type === 'book' ? 'Author' : 'Speaker / Contributor'}
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerOrAuthor}
+                    onChange={(e) => setSpeakerOrAuthor(e.target.value)}
+                    placeholder="e.g. Pastor John Doe / C.S. Lewis"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    {type === 'sermon' ? 'Church / Series Name' : type === 'book' ? 'Book Title' : 'Source / Context'}
+                  </label>
+                  <input
+                    type="text"
+                    value={sourceTitle}
+                    onChange={(e) => setSourceTitle(e.target.value)}
+                    placeholder="e.g. Grace Fellowship / Romans Series"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Scripture Passage Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={biblePassage}
+                    onChange={(e) => setBiblePassage(e.target.value)}
+                    placeholder="e.g. Romans 8:28-39"
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Book Progress if Book */}
+              {type === 'book' && (
+                <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                  <div className="text-[11px] font-bold text-teal-400">Book Reading Tracker</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block mb-0.5">Current Page</span>
+                      <input
+                        type="number"
+                        value={currentPage}
+                        onChange={(e) => setCurrentPage(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="45"
+                        className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block mb-0.5">Total Pages</span>
+                      <input
+                        type="number"
+                        value={totalPages}
+                        onChange={(e) => setTotalPages(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="280"
+                        className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block mb-0.5">Chapter</span>
+                      <input
+                        type="text"
+                        value={chapter}
+                        onChange={(e) => setChapter(e.target.value)}
+                        placeholder="Ch. 4"
+                        className="w-full bg-[#181b26] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ATTACHED PHOTO THUMBNAILS CAROUSEL (IF ANY UPLOADED) */}
+          {imageFiles.length > 0 && (
+            <div className="p-3 rounded-2xl bg-[#12141e] border border-white/[0.08] space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                  <Camera className="w-3.5 h-3.5" />
+                  {imageFiles.length} Captured / Uploaded {imageFiles.length === 1 ? 'Page' : 'Pages'}
+                </span>
+                <span className="text-[10px] text-slate-500">In-memory OCR</span>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {imageFiles.map((img, idx) => (
+                  <div
+                    key={img.id}
+                    className="relative w-20 h-24 sm:w-24 sm:h-28 rounded-xl overflow-hidden border border-white/15 shrink-0 group bg-black/40"
+                  >
+                    <img
+                      src={img.dataUrl}
+                      alt={img.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                      <button
+                        onClick={() => removeImage(img.id)}
+                        className="w-7 h-7 rounded-full bg-rose-600/90 text-white flex items-center justify-center cursor-pointer"
+                        title="Remove page"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-black/70 text-white">
+                      P.{idx + 1}
+                    </span>
+                  </div>
+                ))}
+
+                {imageFiles.length < 5 && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/50 flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-emerald-300 transition shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span className="text-[10px] font-medium">Add Page</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* AUDIO RECORDING ACTIVE DRAWER */}
+          {isRecording && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-red-950/40 via-[#181119] to-teal-950/40 border border-red-500/30 space-y-3 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    Recording Live {audioSource === 'mic' ? 'Microphone' : 'System Audio'}
+                  </span>
+                </div>
+
+                <span className="font-mono text-xs font-bold text-red-400">
+                  {formatSeconds(recordSeconds)}
+                </span>
+              </div>
+
+              {/* Volume bar */}
+              <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-red-500 transition-all duration-75 rounded-full"
+                  style={{ width: `${Math.min(100, Math.max(8, audioVolume))}%` }}
+                />
+              </div>
+
+              {/* Live transcript ticker */}
+              {liveTranscript && (
+                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 text-xs text-slate-300 italic max-h-20 overflow-y-auto">
+                  "{liveTranscript}"
+                </div>
+              )}
+
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={stopRecordingSession}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Stop & Insert Transcription</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* AUDIO ERROR OR NOTICE */}
+          {audioError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center justify-between">
+              <span>{audioError}</span>
+              <button onClick={() => setAudioError(null)} className="text-slate-400 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {audioNotice && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+              <span>{audioNotice}</span>
+              <button onClick={() => setAudioNotice(null)} className="text-slate-400 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* THE BLANK NOTE CANVAS (Typing area) */}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={rawContent}
+              onChange={(e) => setRawContent(e.target.value)}
+              placeholder="Start typing your notes here... (Sermon highlights, personal reflection, book quotes, study thoughts)"
+              className="w-full bg-transparent text-slate-100 placeholder:text-slate-600 text-sm sm:text-base leading-relaxed focus:outline-none min-h-[220px] sm:min-h-[320px] resize-none border-0"
+            />
+          </div>
+
+          {/* AI SUMMARY & INSIGHTS (IF GENERATED) */}
+          {(showAiSection || summary || keyTakeaways.length > 0) && (
+            <div className="pt-4 border-t border-white/[0.08] space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold text-white tracking-wide uppercase">
+                    AI Synthesis · {KILO_MODEL_NAME}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setShowAiSection((prev) => !prev)}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  {showAiSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {showAiSection && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#111420] via-[#0f111a] to-[#0c0e15] border border-teal-500/20 space-y-4">
+                  {/* Executive Summary */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-teal-300">
+                      Executive Summary
+                    </label>
+                    <textarea
+                      value={summary}
+                      onChange={(e) => setSummary(e.target.value)}
+                      placeholder="AI generated or manual executive summary..."
+                      rows={3}
+                      className="w-full bg-[#161925] border border-white/10 rounded-xl p-3 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50 resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Key Takeaways */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                      Key Takeaways
+                    </label>
+                    <div className="space-y-1.5">
+                      {keyTakeaways.map((takeaway, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-slate-300"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold">✓</span>
+                            <span>{takeaway}</span>
+                          </div>
+                          <button
+                            onClick={() => setKeyTakeaways((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-slate-500 hover:text-rose-400 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newTakeaway}
+                          onChange={(e) => setNewTakeaway(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddTakeaway()}
+                          placeholder="Add a key takeaway..."
+                          className="flex-1 bg-[#161925] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                        />
+                        <button
+                          onClick={handleAddTakeaway}
+                          className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-slate-300"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scripture / Quotes */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                      Scriptures & Quotes
+                    </label>
+                    <div className="space-y-1.5">
+                      {quotesOrScriptures.map((q, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-slate-300"
+                        >
+                          <span className="italic">"{q}"</span>
+                          <button
+                            onClick={() => setQuotesOrScriptures((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-slate-500 hover:text-rose-400 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newQuote}
+                          onChange={(e) => setNewQuote(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddQuote()}
+                          placeholder="Add scripture or quote..."
+                          className="flex-1 bg-[#161925] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                        />
+                        <button
+                          onClick={handleAddQuote}
+                          className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-slate-300"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Points */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                      Application & Action Points
+                    </label>
+                    <div className="space-y-1.5">
+                      {actionPoints.map((a, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-slate-300"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="text-amber-400 font-bold">→</span>
+                            <span>{a}</span>
+                          </div>
+                          <button
+                            onClick={() => setActionPoints((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-slate-500 hover:text-rose-400 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newAction}
+                          onChange={(e) => setNewAction(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddAction()}
+                          placeholder="Add application point..."
+                          className="flex-1 bg-[#161925] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                        />
+                        <button
+                          onClick={handleAddAction}
+                          className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-slate-300"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Tags
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {tags.map((t) => (
+                        <span
+                          key={t}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] text-xs text-slate-300 border border-white/10"
+                        >
+                          <Tag className="w-3 h-3 text-slate-400" />
+                          <span>{t}</span>
+                          <button
+                            onClick={() => removeTag(t)}
+                            className="hover:text-rose-400 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                          placeholder="Add tag..."
+                          className="bg-[#161925] border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white w-24 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddTag}
+                          className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* BOTTOM TOOLBAR (DOCKED AT BOTTOM OF CANVAS LIKE iOS / ANDROID NOTES) */}
+        <footer className="px-4 py-2.5 sm:px-6 sm:py-3 border-t border-white/[0.08] bg-[#0d0f18]/95 backdrop-blur-xl flex items-center justify-between gap-2 shrink-0 z-20">
+          
+          {/* Left Actions: Upload/Camera, Record Audio, AI Assist */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            
+            {/* Hidden File Input for 1-5 Pages */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+
+            {/* Scan / Upload Pages Button */}
             <button
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-slate-300 transition cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-emerald-500/15 text-slate-300 hover:text-emerald-300 border border-white/[0.08] text-xs font-semibold transition cursor-pointer"
+              title="Upload 1-5 photos of book pages or handwritten sermon notes"
             >
-              Cancel
+              <Camera className="w-4 h-4 text-emerald-400" />
+              <span className="hidden xs:inline">Scan / Upload</span>
+              {imageFiles.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-black text-[10px] font-bold">
+                  {imageFiles.length}
+                </span>
+              )}
+            </button>
+
+            {/* Record Live Audio Button */}
+            <button
+              onClick={() => {
+                if (isRecording) {
+                  stopRecordingSession();
+                } else {
+                  startRecordingSession();
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+                isRecording
+                  ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse'
+                  : 'bg-white/[0.04] hover:bg-teal-500/15 text-slate-300 hover:text-teal-300 border-white/[0.08]'
+              }`}
+              title="Record live preacher sermon or reading"
+            >
+              {isRecording ? (
+                <>
+                  <Square className="w-3.5 h-3.5 fill-red-400 text-red-400" />
+                  <span>{formatSeconds(recordSeconds)}</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4 text-teal-400" />
+                  <span className="hidden xs:inline">Record</span>
+                </>
+              )}
+            </button>
+
+            {/* Optional Audio Source Selector Pill if not recording */}
+            {!isRecording && isSystemAudioSupported() && (
+              <button
+                onClick={() => setAudioSource(audioSource === 'mic' ? 'tab_audio' : 'mic')}
+                className="hidden md:flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white/[0.03] text-slate-400 hover:text-slate-200 text-[11px] border border-white/5"
+                title={`Source: ${audioSource === 'mic' ? 'Microphone' : 'Tab Audio'}`}
+              >
+                {audioSource === 'mic' ? <Mic className="w-3 h-3" /> : <Radio className="w-3 h-3 text-cyan-400" />}
+                <span>{audioSource === 'mic' ? 'Mic' : 'Tab'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Right Actions: AI Assist & Save */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDetailsDrawer((prev) => !prev)}
+              className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 transition cursor-pointer border border-white/[0.08]"
+              title="Toggle Preacher & Scripture Details"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
             </button>
 
             <button
-              disabled={isSaving}
               onClick={handleSaveNote}
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-emerald-950/60 transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              disabled={isSaving}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving to apps/notes...</span>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>Saving...</span>
                 </>
               ) : (
-                <span>Save Note</span>
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Save</span>
+                </>
               )}
             </button>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   );

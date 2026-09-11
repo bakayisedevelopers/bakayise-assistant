@@ -14,12 +14,15 @@ import {
   Layers,
   Wallet,
   BookOpen,
+  Utensils,
   Search,
   Copy,
   Check,
   Cpu,
+  User,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { UserProfileModal } from './profile/UserProfileModal';
 
 interface AssistantHubProps {
   onLaunchApp: (appId: string) => void;
@@ -28,34 +31,52 @@ interface AssistantHubProps {
 const getAppIcon = (app: AssistantApp) => {
   const key = (app.id || app.appName || app.name || '').toLowerCase();
   if (key.includes('budget') || key.includes('finance') || key.includes('calc')) {
-    return <Wallet className="w-4 h-4 text-emerald-400" />;
+    return <Wallet className="w-5 h-5 text-emerald-300" />;
   }
   if (key.includes('note') || key.includes('book') || key.includes('bible') || key.includes('study')) {
-    return <BookOpen className="w-4 h-4 text-teal-400" />;
+    return <BookOpen className="w-5 h-5 text-teal-300" />;
   }
-  return <Layers className="w-4 h-4 text-cyan-400" />;
+  if (key.includes('meal') || key.includes('food') || key.includes('cook') || key.includes('recipe')) {
+    return <Utensils className="w-5 h-5 text-amber-300" />;
+  }
+  return <Layers className="w-5 h-5 text-cyan-300" />;
 };
 
 const getAppAccent = (app: AssistantApp) => {
   const key = (app.id || app.appName || app.name || '').toLowerCase();
   if (key.includes('budget')) {
     return {
-      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:border-emerald-500/40',
-      glow: 'group-hover:shadow-emerald-950/40 group-hover:border-emerald-500/40',
+      iconBg: 'bg-gradient-to-br from-emerald-500/20 via-emerald-600/15 to-teal-900/30 border-emerald-500/30 text-emerald-300 shadow-emerald-950/40',
+      tag: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      glow: 'hover:border-emerald-500/40 hover:shadow-emerald-950/50',
       text: 'group-hover:text-emerald-300',
+      subtitle: 'Zero-Based Budget & Debts',
     };
   }
   if (key.includes('note')) {
     return {
-      badge: 'bg-teal-500/10 text-teal-400 border-teal-500/20 group-hover:border-teal-500/40',
-      glow: 'group-hover:shadow-teal-950/40 group-hover:border-teal-500/40',
+      iconBg: 'bg-gradient-to-br from-teal-500/20 via-teal-600/15 to-cyan-900/30 border-teal-500/30 text-teal-300 shadow-teal-950/40',
+      tag: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+      glow: 'hover:border-teal-500/40 hover:shadow-teal-950/50',
       text: 'group-hover:text-teal-300',
+      subtitle: 'Sermons, Books & Kilo AI',
+    };
+  }
+  if (key.includes('meal')) {
+    return {
+      iconBg: 'bg-gradient-to-br from-amber-500/20 via-orange-600/15 to-amber-900/30 border-amber-500/30 text-amber-300 shadow-amber-950/40',
+      tag: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      glow: 'hover:border-amber-500/40 hover:shadow-amber-950/50',
+      text: 'group-hover:text-amber-300',
+      subtitle: 'AI Recipes, Pantry & Plan',
     };
   }
   return {
-    badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 group-hover:border-cyan-500/40',
-    glow: 'group-hover:shadow-cyan-950/40 group-hover:border-cyan-500/40',
+    iconBg: 'bg-gradient-to-br from-cyan-500/20 via-cyan-600/15 to-blue-900/30 border-cyan-500/30 text-cyan-300 shadow-cyan-950/40',
+    tag: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    glow: 'hover:border-cyan-500/40 hover:shadow-cyan-950/50',
     text: 'group-hover:text-cyan-300',
+    subtitle: 'Family Workspace Service',
   };
 };
 
@@ -66,6 +87,7 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
   const [selectedApp, setSelectedApp] = useState<AssistantApp | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedPath, setCopiedPath] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToAssistantApps((loadedApps) => {
@@ -126,20 +148,25 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
           </div>
 
           {/* USER PROFILE & LOGOUT */}
-          <div className="flex items-center gap-2.5">
-            {member && (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] transition-colors">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-inner"
-                  style={{ backgroundColor: member.avatarColor || '#10b981' }}
-                >
-                  {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
-                </div>
-                <span className="text-xs font-medium text-slate-200 hidden sm:inline">
-                  {displayName}
-                </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsProfileOpen(true)}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-emerald-500/30 transition cursor-pointer group"
+              title="View & Edit Profile"
+            >
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-inner"
+                style={{ backgroundColor: member?.avatarColor || '#10b981' }}
+              >
+                {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
               </div>
-            )}
+              <span className="text-xs font-medium text-slate-200 group-hover:text-emerald-300 transition-colors hidden sm:inline">
+                {displayName || 'Profile'}
+              </span>
+              <span className="hidden md:inline-block text-[10px] px-1.5 py-0.2 rounded-md bg-white/[0.06] text-slate-400">
+                {member?.role || 'Hubby'}
+              </span>
+            </button>
 
             <button
               onClick={logout}
@@ -230,7 +257,7 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4"
+            className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5"
           >
             {filteredApps.map((app) => {
               const accent = getAppAccent(app);
@@ -239,18 +266,18 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
                 <motion.div
                   key={app.id}
                   whileHover={{ y: -3 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ duration: 0.18 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: 0.16 }}
                   onClick={() => onLaunchApp(app.id)}
-                  className={`group relative rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#141722]/90 to-[#0e1017]/90 hover:bg-[#181c2b] p-3.5 sm:p-4 flex flex-col justify-between min-h-[108px] sm:min-h-[116px] transition-all duration-200 cursor-pointer shadow-md shadow-black/30 hover:shadow-xl ${accent.glow} select-none overflow-hidden`}
+                  className={`group relative rounded-[22px] sm:rounded-[24px] border border-white/[0.09] bg-gradient-to-b from-[#141724]/95 via-[#10121c]/95 to-[#0b0c13]/95 hover:bg-[#161a29] p-4 sm:p-5 flex flex-col justify-between min-h-[140px] sm:min-h-[155px] transition-all duration-200 cursor-pointer shadow-lg shadow-black/40 hover:shadow-2xl ${accent.glow} select-none overflow-hidden`}
                 >
-                  {/* SUBTLE CARD HOVER GLOSS */}
-                  <div className="absolute -top-12 -right-12 w-24 h-24 bg-white/[0.02] rounded-full blur-xl group-hover:bg-emerald-500/[0.08] transition-all" />
+                  {/* AMBIENT RADIAL CORNER ACCENT */}
+                  <div className="absolute -top-10 -right-10 w-28 h-28 bg-white/[0.02] rounded-full blur-2xl group-hover:bg-emerald-500/[0.08] transition-all" />
 
-                  {/* TOP ROW: ICON + THREE DOT BUTTON */}
-                  <div className="flex items-center justify-between w-full relative z-10">
+                  {/* TOP ROW: SQUIRCLE APP ICON + DETAILS MENU */}
+                  <div className="flex items-start justify-between w-full relative z-10">
                     <div
-                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center border transition-colors ${accent.badge}`}
+                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-[16px] sm:rounded-[18px] flex items-center justify-center border shadow-md transition-transform duration-200 group-hover:scale-105 ${accent.iconBg}`}
                     >
                       {getAppIcon(app)}
                     </div>
@@ -260,7 +287,7 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
                         e.stopPropagation();
                         setSelectedApp(app);
                       }}
-                      className="p-1.5 -mr-1 -mt-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-white/[0.03] hover:bg-white/10 transition cursor-pointer border border-transparent hover:border-white/10"
                       title={`${app.appName || app.name} Details`}
                       aria-label={`Open details for ${app.appName || app.name}`}
                     >
@@ -268,14 +295,26 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
                     </button>
                   </div>
 
-                  {/* BOTTOM ROW: APP NAME ONLY + SUBTLE ARROW */}
-                  <div className="pt-3 flex items-center justify-between gap-1 relative z-10">
-                    <span
-                      className={`font-semibold text-sm sm:text-[15px] text-white tracking-tight ${accent.text} transition-colors block truncate`}
-                    >
-                      {app.appName || app.name}
-                    </span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-emerald-400 -translate-x-1 group-hover:translate-x-0 transition-all shrink-0" />
+                  {/* BOTTOM CONTENT: NAME, SUBTITLE & LAUNCH AFFORDANCE */}
+                  <div className="pt-3 relative z-10 space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`font-bold text-sm sm:text-base text-white tracking-tight ${accent.text} transition-colors block truncate`}
+                      >
+                        {app.appName || app.name}
+                      </span>
+                      <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 -translate-x-1 group-hover:translate-x-0 transition-all shrink-0 opacity-70 group-hover:opacity-100" />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="truncate max-w-[120px] sm:max-w-[150px] font-normal">
+                        {accent.subtitle}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        Live
+                      </span>
+                    </div>
                   </div>
                 </motion.div>
               );
@@ -419,6 +458,11 @@ export const AssistantHub: React.FC<AssistantHubProps> = ({ onLaunchApp }) => {
           </div>
         )}
       </AnimatePresence>
+
+      <UserProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
     </div>
   );
 };

@@ -504,7 +504,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
         setIsUnauthorizedDomain(true);
         setAuthError(
-          `Firebase Domain Not Authorized: The current host "${window.location.hostname}" must be added to your Firebase project's Authorized Domains list, or you can use Quick Family Access below.`
+          `Firebase Domain Not Authorized: The current host "${window.location.hostname}" must be added to your Firebase project's Authorized Domains list.`
         );
       } else {
         setAuthError(err.message || 'Failed to sign in with Google. Please try again.');

@@ -159,20 +159,20 @@ export const WeeklyReviewModal: React.FC<WeeklyReviewModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#13151d] border border-white/[0.12] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 sm:backdrop-blur-md overflow-hidden">
+      <div className="relative w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-2xl bg-[#0c0e15] sm:border sm:border-white/[0.12] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col font-sans">
         {/* HEADER */}
-        <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-950/50">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-950/50 shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">
+              <h2 className="text-sm sm:text-base font-bold text-white">
                 Weekly Learning Review
               </h2>
-              <p className="text-[11px] text-slate-400">
-                End-of-week synthesis of all sermons, book chapters & studies · {KILO_MODEL_NAME}
+              <p className="text-[10px] sm:text-[11px] text-slate-400">
+                End-of-week synthesis · {KILO_MODEL_NAME}
               </p>
             </div>
           </div>
