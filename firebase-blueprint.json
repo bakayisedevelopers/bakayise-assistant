@@ -260,9 +260,59 @@
         "workspaceId": { "type": "string", "maxLength": 128 }
       },
       "required": ["id", "name", "checked", "workspaceId"]
+    },
+    "PrayerPerson": {
+      "title": "PrayerPerson",
+      "description": "Person or myself being interceded and prayed for",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "isMyself": { "type": "boolean" },
+        "relationship": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "avatarColor": { "type": "string", "maxLength": 32 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "userId"]
+    },
+    "PrayerRequestItem": {
+      "title": "PrayerRequestItem",
+      "description": "Prayer petition for a person with scriptures, statuses, and log of dates and divine promptings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "personId": { "type": "string", "maxLength": 128 },
+        "personName": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "details": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "enum": ["open", "answered_yes", "answered_no", "delayed", "closed"] },
+        "prayersCount": { "type": "number" },
+        "lastPrayedAt": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 4000 },
+        "dateAnswered": { "type": "string", "maxLength": 64 },
+        "answerTestimony": { "type": "string", "maxLength": 4000 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "personId", "userId", "title", "status"]
     }
   },
   "firestore": {
+    "/apps/prayer_journal": {
+      "description": "Prayer Journal app metadata and settings"
+    },
+    "/apps/prayer_journal/people/{personId}": {
+      "schema": { "$ref": "#/entities/PrayerPerson" },
+      "description": "People on user's prayer list"
+    },
+    "/apps/prayer_journal/prayer_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/PrayerRequestItem" },
+      "description": "Prayer requests with attached scriptures and session logs"
+    },
     "/apps/meal_planner": {
       "description": "Meal planner app metadata and configuration"
     },

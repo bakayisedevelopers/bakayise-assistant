@@ -70,8 +70,28 @@ export const DEFAULT_MEAL_PLANNER_APP_METADATA: AssistantApp = {
   ],
 };
 
+export const DEFAULT_PRAYER_JOURNAL_APP_METADATA: AssistantApp = {
+  id: 'prayer_journal',
+  appName: 'Prayer Journal',
+  name: 'Prayer Journal',
+  appDescription: 'Personal & family prayer journal: track prayer requests, people, scriptures, prayer dates, and what the Lord is prompting you to do.',
+  description: 'Personal & family prayer journal: track prayer requests, people, scriptures, prayer dates, and what the Lord is prompting you to do.',
+  status: 'active',
+  icon: 'heart-handshake',
+  category: 'Spiritual',
+  route: '/prayer_journal',
+  dataPath: 'apps/prayer_journal',
+  features: [
+    'People Prayer List (Praying for yourself, family, church & friends)',
+    'Detailed Prayer Requests with Status (Open, Answered Yes/No, Delayed, Closed)',
+    'Built-in Bible & Scripture Selector (Book/Chapter/Verse with instant search)',
+    'Prayer Log: Record dates prayed & what the Lord is prompting you to do',
+    'Answered Prayers & Testimony celebration journal',
+  ],
+};
+
 /**
- * Ensures core registered applications (Budget, Notes, and Meal Planner) exist in the /apps collection in Firestore,
+ * Ensures core registered applications (Budget, Notes, Meal Planner, Prayer Journal) exist in the /apps collection in Firestore,
  * and strips any legacy "Bakayise " prefix from their stored names.
  */
 export async function ensureFirestoreAppsExist(): Promise<void> {
@@ -138,6 +158,29 @@ export async function ensureFirestoreAppsExist(): Promise<void> {
         }, { merge: true });
       }
     }
+
+    // 4. Ensure /apps/prayer_journal exists
+    const prayerDocRef = doc(db, 'apps', 'prayer_journal');
+    const prayerSnap = await getDoc(prayerDocRef);
+    if (!prayerSnap.exists()) {
+      await setDoc(prayerDocRef, {
+        ...DEFAULT_PRAYER_JOURNAL_APP_METADATA,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const data = prayerSnap.data();
+      if (data?.appName?.startsWith('Bakayise') || data?.name?.startsWith('Bakayise') || !data?.appName) {
+        await setDoc(prayerDocRef, {
+          ...data,
+          appName: 'Prayer Journal',
+          name: 'Prayer Journal',
+          status: 'active',
+          dataPath: 'apps/prayer_journal',
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
   } catch (err) {
     console.warn('Notice ensuring firestore apps exist:', err);
   }
@@ -175,8 +218,8 @@ export function subscribeToAssistantApps(
           updatedAt: data.updatedAt,
           migrationStatus: data.migrationStatus,
           sourceProject: data.sourceProject,
-          icon: data.icon || (id === 'budget' ? 'calculator' : id === 'notes' ? 'book-open' : 'layers'),
-          category: data.category || (id === 'budget' ? 'Finance' : id === 'notes' ? 'Knowledge' : 'General'),
+          icon: data.icon || (id === 'budget' ? 'calculator' : id === 'notes' ? 'book-open' : id === 'meal_planner' ? 'utensils' : id === 'prayer_journal' ? 'heart-handshake' : 'layers'),
+          category: data.category || (id === 'budget' ? 'Finance' : id === 'notes' ? 'Knowledge' : id === 'meal_planner' ? 'Lifestyle' : id === 'prayer_journal' ? 'Spiritual' : 'General'),
           status: (data.status as any) || 'active',
           route: data.route || `/${id}`,
           dataPath: data.dataPath || `apps/${id}`,

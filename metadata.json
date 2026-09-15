@@ -1,6 +1,6 @@
 {
   "name": "Bakayise Assistant",
-  "description": "Bakayise Assistant: Centralized family applications ecosystem featuring zero-based budgeting, debt snowball, AI sermon & book notes, and AI-powered meal planning.",
+  "description": "Bakayise Assistant: Centralized family applications ecosystem featuring zero-based budgeting, debt snowball, AI sermon & book notes, AI-powered meal planning, and personal prayer journal.",
   "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -15,6 +15,7 @@ import {
   Wallet,
   BookOpen,
   Utensils,
+  HeartHandshake,
   Search,
   Copy,
   Check,
@@ -38,6 +39,9 @@ const getAppIcon = (app: AssistantApp) => {
   }
   if (key.includes('meal') || key.includes('food') || key.includes('cook') || key.includes('recipe')) {
     return <Utensils className="w-5 h-5 text-amber-300" />;
+  }
+  if (key.includes('prayer') || key.includes('journal')) {
+    return <HeartHandshake className="w-5 h-5 text-violet-300" />;
   }
   return <Layers className="w-5 h-5 text-cyan-300" />;
 };
@@ -69,6 +73,15 @@ const getAppAccent = (app: AssistantApp) => {
       glow: 'hover:border-amber-500/40 hover:shadow-amber-950/50',
       text: 'group-hover:text-amber-300',
       subtitle: 'AI Recipes, Pantry & Plan',
+    };
+  }
+  if (key.includes('prayer')) {
+    return {
+      iconBg: 'bg-gradient-to-br from-violet-500/20 via-indigo-600/15 to-purple-900/30 border-violet-500/30 text-violet-300 shadow-violet-950/40',
+      tag: 'bg-violet-500/10 text-violet-300 border-violet-500/20',
+      glow: 'hover:border-violet-500/40 hover:shadow-violet-950/50',
+      text: 'group-hover:text-violet-300',
+      subtitle: 'Petitions, Scriptures & Testimonies',
     };
   }
   return {

@@ -548,4 +548,81 @@ export interface FamilyMealPreferences {
   updatedAt: string;
 }
 
+// -------------------------------------------------------------
+// PRAYER JOURNAL TYPES
+// -------------------------------------------------------------
+
+export type PrayerRelationship =
+  | 'Myself'
+  | 'Family'
+  | 'Spouse'
+  | 'Children'
+  | 'Parents'
+  | 'Friend'
+  | 'Church & Ministry'
+  | 'Work & Colleagues'
+  | 'Community'
+  | 'Other';
+
+export interface PrayerPerson {
+  id: string;
+  name: string;
+  isMyself: boolean;
+  relationship: PrayerRelationship;
+  notes?: string;
+  avatarColor?: string;
+  userId: string;
+  authorEmail?: string;
+  authorName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PrayerStatus =
+  | 'open'           // Still praying / ongoing
+  | 'answered_yes'   // God answered Yes
+  | 'answered_no'    // God answered No
+  | 'delayed'        // Wait / in God's timing
+  | 'closed';        // Concluded / answered
+
+export interface PrayerScripture {
+  id: string;
+  reference: string; // e.g. "Philippians 4:6-7"
+  text: string;      // Verse content
+  translation?: string; // e.g. "WEB", "KJV", "NIV"
+  book?: string;
+  chapter?: number;
+  verse?: string;
+}
+
+export interface PrayerSessionLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  timestamp: string; // ISO 8601
+  promptingNotes?: string; // What the Lord is prompting you to do
+  prayedBy?: string;
+  sessionNotes?: string;
+}
+
+export interface PrayerRequestItem {
+  id: string;
+  personId: string;
+  personName?: string;
+  userId: string;
+  authorEmail?: string;
+  title: string;
+  details?: string;
+  status: PrayerStatus;
+  scriptures: PrayerScripture[];
+  prayerSessions: PrayerSessionLog[];
+  prayersCount: number;
+  lastPrayedAt?: string;
+  notes?: string;
+  dateAnswered?: string;
+  answerTestimony?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 

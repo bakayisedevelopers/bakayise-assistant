@@ -97,6 +97,7 @@ import { GoogleAuthScreen } from './components/auth/GoogleAuthScreen';
 import { AssistantHub } from './components/AssistantHub';
 import { NotesApp } from './components/notes/NotesApp';
 import { MealPlannerApp } from './components/meals/MealPlannerApp';
+import { PrayerJournalApp } from './components/prayer/PrayerJournalApp';
 
 import {
   Loader2,
@@ -1729,6 +1730,7 @@ function AssistantAppRouter() {
       if (path === 'budget' || hash === 'budget') return 'budget';
       if (path === 'notes' || hash === 'notes') return 'notes';
       if (path === 'meal_planner' || hash === 'meal_planner' || path === 'meals' || hash === 'meals') return 'meal_planner';
+      if (path === 'prayer_journal' || hash === 'prayer_journal' || path === 'prayer' || hash === 'prayer') return 'prayer_journal';
     } catch {
       // safe fallback
     }
@@ -1748,6 +1750,8 @@ function AssistantAppRouter() {
           setActiveAppId('notes');
         } else if (path === 'meal_planner' || hash === 'meal_planner' || path === 'meals' || hash === 'meals') {
           setActiveAppId('meal_planner');
+        } else if (path === 'prayer_journal' || hash === 'prayer_journal' || path === 'prayer' || hash === 'prayer') {
+          setActiveAppId('prayer_journal');
         } else {
           setActiveAppId(null);
         }
@@ -1801,6 +1805,10 @@ function AssistantAppRouter() {
 
   if (activeAppId === 'meal_planner' || activeAppId === 'meals') {
     return <MealPlannerApp onBackToHub={handleBackToHub} />;
+  }
+
+  if (activeAppId === 'prayer_journal' || activeAppId === 'prayer') {
+    return <PrayerJournalApp onBackToHub={handleBackToHub} />;
   }
 
   return <AssistantHub onLaunchApp={handleLaunchApp} />;
