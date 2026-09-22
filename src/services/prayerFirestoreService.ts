@@ -18,6 +18,7 @@ import {
   PrayerSessionLog,
   AssistantApp,
 } from '../types';
+import { getPrayerPersonIds } from '../utils/prayerRequestPeople';
 
 export const PRAYER_JOURNAL_APP_ID = 'prayer_journal';
 
@@ -128,13 +129,25 @@ export async function deletePrayerPerson(personId: string, userId: string): Prom
   const personRef = doc(db, 'apps', PRAYER_JOURNAL_APP_ID, 'people', personId);
   await deleteDoc(personRef);
 
-  // Also remove prayer requests associated with this person
+  // Remove this person from shared prayers, deleting only requests with no people left.
   try {
     const requestsCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'prayer_requests');
-    const q = query(requestsCol, where('personId', '==', personId));
-    const snap = await getDocs(q);
+    const snap = await getDocs(requestsCol);
     for (const d of snap.docs) {
-      await deleteDoc(d.ref);
+      const request = { id: d.id, ...(d.data() as any) } as PrayerRequestItem;
+      const personIds = getPrayerPersonIds(request);
+      if (!personIds.includes(personId)) continue;
+
+      const remainingPersonIds = personIds.filter((id) => id !== personId);
+      if (remainingPersonIds.length === 0) {
+        await deleteDoc(d.ref);
+      } else {
+        await updateDoc(d.ref, {
+          personIds: remainingPersonIds,
+          personId: remainingPersonIds[0],
+          updatedAt: new Date().toISOString(),
+        });
+      }
     }
   } catch (e) {
     console.warn('Notice removing person child prayer requests:', e);

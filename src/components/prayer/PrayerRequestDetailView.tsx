@@ -39,6 +39,7 @@ import { AddEditRequestModal } from './AddEditRequestModal';
 interface PrayerRequestDetailViewProps {
   request: PrayerRequestItem;
   person: PrayerPerson;
+  people: PrayerPerson[];
   onBack: () => void;
   onUpdateRequest: (updated: PrayerRequestItem) => Promise<void> | void;
   onDeleteRequest: (requestId: string) => Promise<void> | void;
@@ -92,6 +93,7 @@ const STATUS_CONFIG: Record<
 export const PrayerRequestDetailView: React.FC<PrayerRequestDetailViewProps> = ({
   request,
   person,
+  people,
   onBack,
   onUpdateRequest,
   onDeleteRequest,
@@ -1078,6 +1080,7 @@ export const PrayerRequestDetailView: React.FC<PrayerRequestDetailViewProps> = (
           setIsEditModalOpen(false);
         }}
         person={person}
+        people={people}
         initialRequest={request}
         currentUserId={currentUserId || request.userId}
         currentUserEmail={currentUserEmail}

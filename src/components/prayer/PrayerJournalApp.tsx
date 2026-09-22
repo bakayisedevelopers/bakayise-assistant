@@ -20,6 +20,7 @@ import { PrayerPeopleLandingView } from './PrayerPeopleLandingView';
 import { PersonPrayerRequestsView } from './PersonPrayerRequestsView';
 import { PrayerRequestDetailView } from './PrayerRequestDetailView';
 import { Loader2 } from 'lucide-react';
+import { isPrayerForPerson } from '../../utils/prayerRequestPeople';
 
 interface PrayerJournalAppProps {
   onBackToHub?: () => void;
@@ -143,7 +144,7 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
   const selectedPerson = people.find((p) => p.id === selectedPersonId);
   const selectedRequest = requests.find((r) => r.id === selectedRequestId);
   const personRequests = selectedPersonId
-    ? requests.filter((r) => r.personId === selectedPersonId)
+    ? requests.filter((r) => isPrayerForPerson(r, selectedPersonId))
     : [];
 
   if (loading && people.length === 0) {
@@ -161,6 +162,7 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
       <PrayerRequestDetailView
         request={selectedRequest}
         person={selectedPerson}
+        people={people}
         onBack={handleBackToPerson}
         onUpdateRequest={handleSaveRequest}
         onDeleteRequest={handleDeleteRequest}
@@ -176,6 +178,7 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
     return (
       <PersonPrayerRequestsView
         person={selectedPerson}
+        people={people}
         requests={personRequests}
         onBack={handleBackToLanding}
         onSelectRequest={handleSelectRequest}

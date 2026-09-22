@@ -649,6 +649,8 @@ export interface PrayerRequestItem {
   id: string;
   personId: string;
   personName?: string;
+  /** All people this prayer is about. Legacy requests fall back to personId. */
+  personIds?: string[];
   userId: string;
   authorEmail?: string;
   authorName?: string;
@@ -671,6 +673,5 @@ export interface PrayerRequestItem {
   createdAt: string;
   updatedAt: string;
 }
-
 
 
