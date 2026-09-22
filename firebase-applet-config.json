@@ -1,11 +1,12 @@
 {
   "projectId": "bakayise-assistant",
-  "appId": "1:363451915611:web:e0b0879d3f7ad24de4ce7e",
+  "appId": "1:363451915611:web:e016db0af3587a10e4ce7e",
   "apiKey": "AIzaSyAhQS6Y4_a8Zsk2NlTN9hSI-pXXVkJFZhk",
   "authDomain": "bakayise-assistant.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-bakayiseassistan-65f3c1e4-0445-47f2-b846-442355aea239",
   "storageBucket": "bakayise-assistant.firebasestorage.app",
   "messagingSenderId": "363451915611",
   "measurementId": "",
+  "oAuthClientId": "363451915611-k9gt1uej3ommmo836tj6qtseng1c0e74.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

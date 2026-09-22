@@ -95,10 +95,10 @@ export interface BibleTranslation {
 }
 
 export const SUPPORTED_TRANSLATIONS: BibleTranslation[] = [
-  { id: 'web', name: 'World English Bible (WEB)', description: 'Modern, clear English (Public Domain)' },
-  { id: 'kjv', name: 'King James Version (KJV)', description: 'Classic 1611 majestic text (Public Domain)' },
-  { id: 'bbe', name: 'Bible in Basic English (BBE)', description: 'Simple, direct vocabulary (Public Domain)' },
-  { id: 'oeb-us', name: 'Open English Bible (OEB)', description: 'Contemporary open-source English' },
+  { id: 'kjv', name: 'King James Version (KJV)', description: 'Classic 1611 majestic biblical text' },
+  { id: 'nkjv', name: 'New King James Version (NKJV)', description: 'Modern language preserving lyrical reverence' },
+  { id: 'nlt', name: 'New Living Translation (NLT)', description: 'Clear, contemporary, easy-to-read English' },
+  { id: 'amp', name: 'Amplified Bible (AMP)', description: 'Expanded word meanings and contextual clarification' },
 ];
 
 export interface BibleVerseItem {
@@ -120,64 +120,104 @@ export interface FetchedScripture {
 
 /**
  * Searches and fetches any passage, chapter, or verse across the entire Bible
- * using the public open-source API: https://bible-api.com
+ * in KJV, NKJV, NLT, or AMP.
  */
 export async function fetchScriptureByReference(
   reference: string,
-  translation: string = 'web'
+  translation: string = 'kjv'
 ): Promise<FetchedScripture> {
   const cleanRef = reference.trim();
   if (!cleanRef) {
     throw new Error('Please specify a Bible book, chapter, or verse reference (e.g. John 3:16, Romans 8:28, Psalm 23).');
   }
 
-  const encodedRef = encodeURIComponent(cleanRef);
-  const url = `https://bible-api.com/${encodedRef}?translation=${encodeURIComponent(translation)}`;
+  const cleanTrans = (translation || 'kjv').toLowerCase().trim();
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 9000);
-
+  // Try server endpoint first (handles KJV, NKJV, NLT, and AMP seamlessly)
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    const res = await fetch('/api/bible/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference: cleanRef, translation: cleanTrans }),
+    });
 
-    if (!res.ok) {
-      if (res.status === 404) {
-        throw new Error(`Reference "${cleanRef}" not found. Please check book name and chapter/verse numbers.`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.text) {
+        return {
+          reference: data.reference || cleanRef,
+          text: (data.text || '').trim().replace(/\s+/g, ' '),
+          translation: data.translation || cleanTrans.toUpperCase(),
+          translationId: cleanTrans,
+          verses: Array.isArray(data.verses)
+            ? data.verses.map((v: any) => ({
+                book_id: v.book_id || '',
+                book_name: v.book_name || '',
+                chapter: Number(v.chapter) || 1,
+                verse: Number(v.verse) || 1,
+                text: (v.text || '').trim().replace(/\s+/g, ' '),
+              }))
+            : [],
+          versesCount: data.verses?.length || 1,
+        };
       }
-      throw new Error(`Bible API returned status ${res.status}`);
     }
-
-    const data = await res.json();
-    if (!data || !data.text) {
-      throw new Error(`No scripture text found for "${cleanRef}".`);
-    }
-
-    const cleanVerses: BibleVerseItem[] = Array.isArray(data.verses)
-      ? data.verses.map((v: any) => ({
-          book_id: v.book_id || '',
-          book_name: v.book_name || '',
-          chapter: Number(v.chapter) || 1,
-          verse: Number(v.verse) || 1,
-          text: (v.text || '').trim().replace(/\s+/g, ' '),
-        }))
-      : [];
-
-    return {
-      reference: data.reference || cleanRef,
-      text: data.text.trim().replace(/\s+/g, ' '),
-      translation: data.translation_name || translation.toUpperCase(),
-      translationId: data.translation_id || translation,
-      verses: cleanVerses,
-      versesCount: cleanVerses.length || 1,
-    };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      throw new Error('The Bible API took too long to respond. Please check your internet connection or retry.');
-    }
-    throw err;
+  } catch (backendErr) {
+    console.warn('Backend /api/bible/lookup unavailable, falling back:', backendErr);
   }
+
+  // Fallback for KJV via bible-api.com
+  if (cleanTrans === 'kjv') {
+    const encodedRef = encodeURIComponent(cleanRef);
+    const url = `https://bible-api.com/${encodedRef}?translation=kjv`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error(`Reference "${cleanRef}" not found. Please check book name and chapter/verse numbers.`);
+        }
+        throw new Error(`Bible API returned status ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data || !data.text) {
+        throw new Error(`No scripture text found for "${cleanRef}".`);
+      }
+
+      const cleanVerses: BibleVerseItem[] = Array.isArray(data.verses)
+        ? data.verses.map((v: any) => ({
+            book_id: v.book_id || '',
+            book_name: v.book_name || '',
+            chapter: Number(v.chapter) || 1,
+            verse: Number(v.verse) || 1,
+            text: (v.text || '').trim().replace(/\s+/g, ' '),
+          }))
+        : [];
+
+      return {
+        reference: data.reference || cleanRef,
+        text: data.text.trim().replace(/\s+/g, ' '),
+        translation: 'King James Version (KJV)',
+        translationId: 'kjv',
+        verses: cleanVerses,
+        versesCount: cleanVerses.length || 1,
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('The Bible API took too long to respond. Please check your internet connection or retry.');
+      }
+      throw err;
+    }
+  }
+
+  throw new Error(`Unable to fetch scripture for "${cleanRef}" in ${cleanTrans.toUpperCase()}. Please try again.`);
 }
 
 /**
@@ -187,9 +227,30 @@ export async function fetchScriptureByReference(
 export async function fetchChapterVerses(
   book: string,
   chapter: number,
-  translation: string = 'web'
+  translation: string = 'kjv'
 ): Promise<BibleVerseItem[]> {
+  const cleanTrans = (translation || 'kjv').toLowerCase().trim();
+
+  // 1. Try server chapter endpoint first
+  try {
+    const res = await fetch('/api/bible/chapter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book, chapter, translation: cleanTrans }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.verses) && data.verses.length > 0) {
+        return data.verses;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend /api/bible/chapter unavailable, using fallback:', err);
+  }
+
+  // 2. Fallback to reference lookup
   const ref = `${book} ${chapter}`;
-  const result = await fetchScriptureByReference(ref, translation);
+  const result = await fetchScriptureByReference(ref, cleanTrans);
   return result.verses || [];
 }

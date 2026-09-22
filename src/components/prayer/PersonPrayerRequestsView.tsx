@@ -15,6 +15,8 @@ import {
   Edit3,
   Trash2,
   Filter,
+  Lock,
+  Users,
 } from 'lucide-react';
 import {
   PrayerPerson,
@@ -35,6 +37,8 @@ interface PersonPrayerRequestsViewProps {
   onDeletePerson: (personId: string) => Promise<void> | void;
   currentUserId: string;
   currentUserEmail?: string;
+  currentUserName?: string;
+  currentUserRole?: string;
 }
 
 const STATUS_BADGE: Record<
@@ -84,11 +88,20 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
   onDeletePerson,
   currentUserId,
   currentUserEmail,
+  currentUserName,
+  currentUserRole,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'answered' | 'delayed'>('all');
   const [isAddRequestModalOpen, setIsAddRequestModalOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<PrayerRequestItem | null>(null);
   const [isEditPersonModalOpen, setIsEditPersonModalOpen] = useState(false);
+
+  const normalizedUserEmail = (currentUserEmail || '').toLowerCase().trim();
+  const isOwner =
+    person.userId === currentUserId ||
+    (Boolean(normalizedUserEmail) &&
+      person.authorEmail?.toLowerCase().trim() === normalizedUserEmail);
 
   // Filter requests
   const filteredRequests = useMemo(() => {
@@ -131,29 +144,31 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsEditPersonModalOpen(true)}
-              className="p-2 rounded-xl text-slate-400 hover:text-violet-300 hover:bg-violet-950/30 border border-transparent hover:border-violet-500/20 transition-colors"
-              title="Edit person details"
+              className="p-2 rounded-xl text-slate-400 hover:text-violet-300 hover:bg-violet-950/30 border border-transparent hover:border-violet-500/20 transition-colors cursor-pointer"
+              title="Edit person details & sharing"
               aria-label="Edit person"
             >
               <Edit3 className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Are you sure you want to delete ${person.name} and all associated prayer requests?`
-                  )
-                ) {
-                  onDeletePerson(person.id);
-                  onBack();
-                }
-              }}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 border border-transparent hover:border-rose-500/20 transition-colors"
-              title="Delete person"
-              aria-label="Delete person"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Are you sure you want to delete ${person.name} and all associated prayer requests?`
+                    )
+                  ) {
+                    onDeletePerson(person.id);
+                    onBack();
+                  }
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer"
+                title="Delete person"
+                aria-label="Delete person"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -188,14 +203,32 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
                       <span>Praying for Myself</span>
                     </span>
                   )}
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-950/60 text-violet-300/80 border border-violet-500/20">
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-950/60 text-violet-300/90 border border-violet-500/20">
                     {person.relationship}
                   </span>
+                  {person.customRelationship &&
+                    person.customRelationship !== person.relationship && (
+                      <span className="text-[10px] text-amber-300/90 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">
+                        {person.customRelationship}
+                      </span>
+                    )}
                 </div>
                 {person.notes && (
                   <p className="text-xs text-slate-300 leading-relaxed italic">
                     "{person.notes}"
                   </p>
+                )}
+
+                {/* Author attribution if shared person */}
+                {!isOwner && person.authorEmail && (
+                  <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400">
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-950/50 text-cyan-300 border border-cyan-500/25 font-medium">
+                      Shared List
+                    </span>
+                    <span>
+                      Created by <strong className="text-violet-200">{person.authorName || person.authorEmail.split('@')[0]}</strong> ({person.authorEmail})
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -328,6 +361,37 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
                       {badge.label}
                     </span>
 
+                    {/* Privacy badge */}
+                    {req.isPrivate ? (
+                      <span
+                        className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-300/90 bg-amber-950/40 border border-amber-500/20 px-1.5 py-0.5 rounded-full font-medium"
+                        title="Strictly confidential / Only me"
+                      >
+                        <Lock className="w-2.5 h-2.5 text-amber-400" />
+                        <span className="hidden sm:inline">Private</span>
+                      </span>
+                    ) : req.sharedWithEmails && req.sharedWithEmails.length > 0 ? (
+                      <span
+                        className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] text-violet-300 bg-violet-950/50 border border-violet-500/30 px-1.5 py-0.5 rounded-full font-medium"
+                        title={
+                          req.authorEmail &&
+                          normalizedUserEmail &&
+                          req.authorEmail.toLowerCase().trim() !== normalizedUserEmail
+                            ? `Shared by ${req.authorName || req.authorEmail}`
+                            : `Shared with: ${req.sharedWithEmails.join(', ')}`
+                        }
+                      >
+                        <Users className="w-2.5 h-2.5 text-violet-400" />
+                        <span className="hidden sm:inline">
+                          {req.authorEmail &&
+                          normalizedUserEmail &&
+                          req.authorEmail.toLowerCase().trim() !== normalizedUserEmail
+                            ? `Shared by ${req.authorName || req.authorEmail.split('@')[0]}`
+                            : `Shared (${req.sharedWithEmails.length})`}
+                        </span>
+                      </span>
+                    ) : null}
+
                     {/* Title and details */}
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
@@ -388,14 +452,19 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
         </section>
       </main>
 
-      {/* Add Request Modal */}
+      {/* Add / Edit Request Modal */}
       <AddEditRequestModal
-        isOpen={isAddRequestModalOpen}
-        onClose={() => setIsAddRequestModalOpen(false)}
+        isOpen={isAddRequestModalOpen || Boolean(editingRequest)}
+        onClose={() => {
+          setIsAddRequestModalOpen(false);
+          setEditingRequest(null);
+        }}
         onSaveRequest={onSaveRequest}
         person={person}
+        initialRequest={editingRequest}
         currentUserId={currentUserId}
         currentUserEmail={currentUserEmail}
+        currentUserName={currentUserName}
       />
 
       {/* Edit Person Modal */}
@@ -406,6 +475,7 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
         initialPerson={person}
         currentUserId={currentUserId}
         currentUserEmail={currentUserEmail}
+        currentUserName={currentUserName}
       />
     </div>
   );

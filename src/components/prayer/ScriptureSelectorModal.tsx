@@ -35,7 +35,7 @@ export const ScriptureSelectorModal: React.FC<ScriptureSelectorModalProps> = ({
   existingScriptures = [],
 }) => {
   const [tab, setTab] = useState<'browse' | 'search' | 'manual'>('browse');
-  const [selectedTranslation, setSelectedTranslation] = useState<string>('web');
+  const [selectedTranslation, setSelectedTranslation] = useState<string>('kjv');
 
   // Browse state
   const [testamentFilter, setTestamentFilter] = useState<'ALL' | 'OT' | 'NT'>('NT');

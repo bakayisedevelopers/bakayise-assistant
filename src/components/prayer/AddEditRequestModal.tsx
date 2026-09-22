@@ -7,6 +7,11 @@ import {
   FileText,
   Plus,
   Trash2,
+  Shield,
+  Lock,
+  Users,
+  Check,
+  UserPlus,
 } from 'lucide-react';
 import {
   PrayerRequestItem,
@@ -14,6 +19,7 @@ import {
   PrayerScripture,
   PrayerPerson,
 } from '../../types';
+import { ALLOWED_EMAILS_MAP } from '../../utils/authConstants';
 import { ScriptureSelectorModal } from './ScriptureSelectorModal';
 
 interface AddEditRequestModalProps {
@@ -24,6 +30,7 @@ interface AddEditRequestModalProps {
   initialRequest?: PrayerRequestItem | null;
   currentUserId: string;
   currentUserEmail?: string;
+  currentUserName?: string;
 }
 
 const STATUS_OPTIONS: { id: PrayerStatus; label: string; desc: string; color: string }[] = [
@@ -42,14 +49,28 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
   initialRequest,
   currentUserId,
   currentUserEmail,
+  currentUserName,
 }) => {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
   const [status, setStatus] = useState<PrayerStatus>('open');
   const [scriptures, setScriptures] = useState<PrayerScripture[]>([]);
   const [notes, setNotes] = useState('');
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [sharedWithEmails, setSharedWithEmails] = useState<string[]>([]);
+  const [customEmailInput, setCustomEmailInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [isScriptureModalOpen, setIsScriptureModalOpen] = useState(false);
+
+  // Compute spouse default based on current user email
+  const normalizedCurrentEmail = (currentUserEmail || '').toLowerCase().trim();
+  const spouseCandidateEmail = normalizedCurrentEmail.includes('lum')
+    ? 'jabuobed1@gmail.com'
+    : 'lumzayopa@gmail.com';
+
+  const availableIntercessors = Object.values(ALLOWED_EMAILS_MAP).filter(
+    (m) => m.email.toLowerCase() !== normalizedCurrentEmail
+  );
 
   useEffect(() => {
     if (initialRequest) {
@@ -58,16 +79,43 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
       setStatus(initialRequest.status || 'open');
       setScriptures(initialRequest.scriptures || []);
       setNotes(initialRequest.notes || '');
+      const shared = (initialRequest.sharedWithEmails || []).map((e) =>
+        e.toLowerCase().trim()
+      );
+      setSharedWithEmails(shared);
+      if (initialRequest.isPrivate !== undefined) {
+        setIsPrivate(initialRequest.isPrivate);
+      } else {
+        setIsPrivate(shared.length === 0);
+      }
     } else {
       setTitle('');
       setDetails('');
       setStatus('open');
       setScriptures([]);
       setNotes('');
+      setIsPrivate(true);
+      setSharedWithEmails([]);
+      setCustomEmailInput('');
     }
   }, [initialRequest, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleAddCustomEmail = () => {
+    const trimmed = customEmailInput.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) return;
+    if (!sharedWithEmails.includes(trimmed)) {
+      setSharedWithEmails((prev) => [...prev, trimmed]);
+    }
+    setCustomEmailInput('');
+  };
+
+  const handleRemoveSharedEmail = (emailToRemove: string) => {
+    setSharedWithEmails((prev) =>
+      prev.filter((e) => e.toLowerCase() !== emailToRemove.toLowerCase())
+    );
+  };
 
   const handleAddScripture = (scrip: PrayerScripture) => {
     setScriptures((prev) => {
@@ -89,14 +137,21 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
     setSaving(true);
     try {
       const now = new Date().toISOString();
+      const activeSharedEmails = isPrivate
+        ? []
+        : sharedWithEmails.filter(Boolean).map((e) => e.toLowerCase().trim());
+
       const reqItem: PrayerRequestItem = {
         id: initialRequest
           ? initialRequest.id
           : `prayer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         personId: person.id,
         personName: person.name,
-        userId: currentUserId,
-        authorEmail: currentUserEmail,
+        userId: initialRequest ? initialRequest.userId : currentUserId,
+        authorEmail: initialRequest ? initialRequest.authorEmail || currentUserEmail : currentUserEmail,
+        authorName: initialRequest ? initialRequest.authorName || currentUserName : currentUserName,
+        isPrivate: isPrivate,
+        sharedWithEmails: activeSharedEmails,
         title: title.trim(),
         details: details.trim() || undefined,
         status,
@@ -206,6 +261,185 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
                 placeholder="Explain the background or specific requests being lifted up in prayer..."
                 className="w-full p-2.5 text-xs bg-[#0C0B18] border border-violet-500/25 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-400 leading-relaxed resize-none"
               />
+            </div>
+
+            {/* Prayer Privacy & Access Section */}
+            <div className="p-3.5 rounded-xl bg-[#0F0E20] border border-violet-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Prayer Privacy & Access</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {isPrivate ? '🔒 Private to You' : '🤝 Shared with Intercessors'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPrivate(true);
+                    setSharedWithEmails([]);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                    isPrivate
+                      ? 'bg-violet-950/60 border-violet-400/60 text-white shadow-sm shadow-violet-950/40'
+                      : 'bg-[#0A0915] border-violet-500/10 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-amber-300">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Only Me (Private)</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    Strictly confidential between you and God. Nobody else can see this petition.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPrivate(false);
+                    // Pre-select spouse candidate if empty
+                    if (sharedWithEmails.length === 0 && spouseCandidateEmail) {
+                      setSharedWithEmails([spouseCandidateEmail.toLowerCase()]);
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                    !isPrivate
+                      ? 'bg-violet-950/60 border-violet-400/60 text-white shadow-sm shadow-violet-950/40'
+                      : 'bg-[#0A0915] border-violet-500/10 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-emerald-300">
+                    <Users className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Share Intercessors</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    Allow spouse or intercessory partners to pray, add scriptures & track breakthrough.
+                  </p>
+                </button>
+              </div>
+
+              {!isPrivate && (
+                <div className="pt-2 border-t border-violet-500/15 space-y-2.5">
+                  <span className="text-[11px] font-medium text-slate-300 block">
+                    Select Who Can Pray For This Specific Request:
+                  </span>
+                  <div className="space-y-1.5">
+                    {availableIntercessors.map((intercessor) => {
+                      const isSelected = sharedWithEmails.includes(
+                        intercessor.email.toLowerCase()
+                      );
+                      return (
+                        <label
+                          key={intercessor.email}
+                          className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-violet-900/30 border-violet-500/40 text-white'
+                              : 'bg-black/30 border-white/5 text-slate-400 hover:bg-black/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow"
+                              style={{ backgroundColor: intercessor.avatarColor }}
+                            >
+                              {intercessor.displayName.charAt(0)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-white">
+                                {intercessor.displayName} ({intercessor.role})
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {intercessor.email}
+                              </span>
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSharedWithEmails((prev) => [
+                                  ...prev,
+                                  intercessor.email.toLowerCase(),
+                                ]);
+                              } else {
+                                setSharedWithEmails((prev) =>
+                                  prev.filter(
+                                    (em) => em !== intercessor.email.toLowerCase()
+                                  )
+                                );
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-violet-600 bg-slate-900 border-violet-500/30 focus:ring-0 focus:ring-offset-0"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add additional custom intercessor email */}
+                  <div className="pt-1.5">
+                    <label className="block text-[10px] text-slate-400 mb-1">
+                      Invite another prayer partner by email:
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="email"
+                        placeholder="partner@example.com"
+                        value={customEmailInput}
+                        onChange={(e) => setCustomEmailInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomEmail();
+                          }
+                        }}
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-[#0C0B18] border border-violet-500/25 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomEmail}
+                        className="px-3 py-1.5 rounded-xl bg-violet-600/40 hover:bg-violet-600/60 border border-violet-500/30 text-white text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+
+                    {/* Chips for custom added emails */}
+                    {sharedWithEmails.filter(
+                      (e) => !availableIntercessors.some((m) => m.email.toLowerCase() === e)
+                    ).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2">
+                        {sharedWithEmails
+                          .filter(
+                            (e) =>
+                              !availableIntercessors.some((m) => m.email.toLowerCase() === e)
+                          )
+                          .map((customEmail) => (
+                            <span
+                              key={customEmail}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-950/70 border border-violet-500/30 text-violet-200 text-[11px]"
+                            >
+                              <span>{customEmail}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSharedEmail(customEmail)}
+                                className="text-slate-400 hover:text-rose-400 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Attached Scriptures */}

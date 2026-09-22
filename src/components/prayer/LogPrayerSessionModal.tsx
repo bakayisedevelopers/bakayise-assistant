@@ -16,6 +16,8 @@ interface LogPrayerSessionModalProps {
   prayerTitle: string;
   personName?: string;
   userName?: string;
+  userEmail?: string;
+  userRole?: string;
 }
 
 export const LogPrayerSessionModal: React.FC<LogPrayerSessionModalProps> = ({
@@ -25,6 +27,8 @@ export const LogPrayerSessionModal: React.FC<LogPrayerSessionModalProps> = ({
   prayerTitle,
   personName,
   userName,
+  userEmail,
+  userRole,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(todayStr);
@@ -42,6 +46,8 @@ export const LogPrayerSessionModal: React.FC<LogPrayerSessionModalProps> = ({
       promptingNotes: promptingNotes.trim() || undefined,
       sessionNotes: sessionNotes.trim() || undefined,
       prayedBy: userName,
+      prayedByEmail: userEmail,
+      prayedByRole: userRole,
     };
     onSaveSession(session);
     setPromptingNotes('');

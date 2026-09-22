@@ -307,8 +307,23 @@ export interface UserProfile extends EditAuditInfo {
   titleOrMotto?: string;
   bio?: string;
   themePreference?: 'dark' | 'light' | 'system';
+  spouseLink?: SpouseLinkDoc;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface SpouseLinkDoc {
+  id: string; // [email1, email2].sort().join('__')
+  requesterEmail: string;
+  requesterName: string;
+  requesterRole: 'Husband' | 'Wife';
+  targetEmail: string;
+  targetName?: string;
+  targetRole: 'Husband' | 'Wife';
+  status: 'pending' | 'connected' | 'declined';
+  requestedAt: string;
+  confirmedAt?: string;
+  declinedAt?: string;
 }
 
 export interface AssistantApp {
@@ -554,12 +569,31 @@ export interface FamilyMealPreferences {
 
 export type PrayerRelationship =
   | 'Myself'
-  | 'Family'
+  | 'Husband'
+  | 'Wife'
   | 'Spouse'
+  | 'Son'
+  | 'Daughter'
   | 'Children'
+  | 'Spiritual Son'
+  | 'Spiritual Daughter'
+  | 'Father'
+  | 'Mother'
+  | 'Spiritual Father'
+  | 'Spiritual Mother'
   | 'Parents'
-  | 'Friend'
+  | 'Brother'
+  | 'Sister'
+  | 'Brother-in-law'
+  | 'Sister-in-law'
+  | 'Mother-in-law'
+  | 'Father-in-law'
+  | 'Family'
+  | 'Pastor'
+  | 'Brother in Christ'
+  | 'Sister in Christ'
   | 'Church & Ministry'
+  | 'Friend'
   | 'Work & Colleagues'
   | 'Community'
   | 'Other';
@@ -569,11 +603,16 @@ export interface PrayerPerson {
   name: string;
   isMyself: boolean;
   relationship: PrayerRelationship;
+  customRelationship?: string; // If 'Other' or custom family/sub-category (e.g. Cousin, Aunt, Mentee)
   notes?: string;
   avatarColor?: string;
   userId: string;
   authorEmail?: string;
   authorName?: string;
+  sharedWithUserIds?: string[];
+  sharedWithEmails?: string[];
+  isPrivate?: boolean;
+  linkedSpouseEmail?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -601,6 +640,8 @@ export interface PrayerSessionLog {
   timestamp: string; // ISO 8601
   promptingNotes?: string; // What the Lord is prompting you to do
   prayedBy?: string;
+  prayedByEmail?: string;
+  prayedByRole?: string;
   sessionNotes?: string;
 }
 
@@ -610,6 +651,10 @@ export interface PrayerRequestItem {
   personName?: string;
   userId: string;
   authorEmail?: string;
+  authorName?: string;
+  sharedWithUserIds?: string[];
+  sharedWithEmails?: string[];
+  isPrivate?: boolean;
   title: string;
   details?: string;
   status: PrayerStatus;
@@ -617,6 +662,9 @@ export interface PrayerRequestItem {
   prayerSessions: PrayerSessionLog[];
   prayersCount: number;
   lastPrayedAt?: string;
+  lastPrayedBy?: string;
+  lastPrayedByEmail?: string;
+  lastPrayedByRole?: string;
   notes?: string;
   dateAnswered?: string;
   answerTestimony?: string;

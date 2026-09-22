@@ -14,6 +14,7 @@ import {
   deletePrayerRequest,
   ensurePrayerJournalAppDocument,
   logPrayerSession,
+  migrateLegacyPrayerData,
 } from '../../services/prayerFirestoreService';
 import { PrayerPeopleLandingView } from './PrayerPeopleLandingView';
 import { PersonPrayerRequestsView } from './PersonPrayerRequestsView';
@@ -25,10 +26,11 @@ interface PrayerJournalAppProps {
 }
 
 export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub }) => {
-  const { user } = useAuth();
+  const { user, userRole, displayName } = useAuth();
   const userId = user?.uid || 'guest_user';
   const userEmail = user?.email || undefined;
-  const userName = user?.displayName || user?.email?.split('@')[0] || 'User';
+  const userName = displayName || user?.displayName || user?.email?.split('@')[0] || 'Intercessor';
+  const roleStr = userRole || undefined;
 
   // Navigation State
   const [currentView, setCurrentView] = useState<'landing' | 'person' | 'request_detail'>('landing');
@@ -40,16 +42,20 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
   const [requests, setRequests] = useState<PrayerRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Initialize app doc in Firestore
+  // Initialize app doc in Firestore & run migration check
   useEffect(() => {
     ensurePrayerJournalAppDocument();
-  }, []);
+    if (userId && userId !== 'guest_user') {
+      migrateLegacyPrayerData(userId, userEmail);
+    }
+  }, [userId, userEmail]);
 
   // Subscribe to real-time people
   useEffect(() => {
     setLoading(true);
     const unsubscribePeople = subscribeToPrayerPeople(
       userId,
+      userEmail,
       (data) => {
         setPeople(data);
         setLoading(false);
@@ -62,6 +68,7 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
 
     const unsubscribeRequests = subscribeToAllUserPrayerRequests(
       userId,
+      userEmail,
       (data) => {
         setRequests(data);
       },
@@ -74,7 +81,7 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
       unsubscribePeople();
       unsubscribeRequests();
     };
-  }, [userId]);
+  }, [userId, userEmail]);
 
   // Handlers
   const handleSelectPerson = useCallback((personId: string) => {
@@ -127,6 +134,8 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
       date: todayStr,
       timestamp: new Date().toISOString(),
       prayedBy: userName,
+      prayedByEmail: userEmail,
+      prayedByRole: roleStr,
     };
     await logPrayerSession(req.id, req, session);
   };
@@ -155,7 +164,10 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
         onBack={handleBackToPerson}
         onUpdateRequest={handleSaveRequest}
         onDeleteRequest={handleDeleteRequest}
+        currentUserId={userId}
         currentUserName={userName}
+        currentUserEmail={userEmail}
+        currentUserRole={roleStr}
       />
     );
   }
@@ -173,6 +185,8 @@ export const PrayerJournalApp: React.FC<PrayerJournalAppProps> = ({ onBackToHub 
         onDeletePerson={handleDeletePerson}
         currentUserId={userId}
         currentUserEmail={userEmail}
+        currentUserName={userName}
+        currentUserRole={roleStr}
       />
     );
   }

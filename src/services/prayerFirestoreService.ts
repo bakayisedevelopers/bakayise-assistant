@@ -87,18 +87,19 @@ export async function ensurePrayerJournalAppDocument(): Promise<void> {
 
 export function subscribeToPrayerPeople(
   userId: string,
+  userEmail: string | undefined,
   onData: (people: PrayerPerson[]) => void,
   onError?: (error: any) => void
 ) {
   const peopleCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'people');
-  const q = query(peopleCol, where('userId', '==', userId));
 
   return onSnapshot(
-    q,
+    peopleCol,
     (snapshot) => {
       const items: PrayerPerson[] = [];
       snapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...(docSnap.data() as any) });
+        const p = { id: docSnap.id, ...(docSnap.data() as any) } as PrayerPerson;
+        items.push(p);
       });
       // Sort: 'Myself' always at top, then newest created
       items.sort((a, b) => {
@@ -130,7 +131,7 @@ export async function deletePrayerPerson(personId: string, userId: string): Prom
   // Also remove prayer requests associated with this person
   try {
     const requestsCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'prayer_requests');
-    const q = query(requestsCol, where('userId', '==', userId), where('personId', '==', personId));
+    const q = query(requestsCol, where('personId', '==', personId));
     const snap = await getDocs(q);
     for (const d of snap.docs) {
       await deleteDoc(d.ref);
@@ -146,18 +147,51 @@ export async function deletePrayerPerson(personId: string, userId: string): Prom
 
 export function subscribeToAllUserPrayerRequests(
   userId: string,
+  userEmail: string | undefined,
   onData: (requests: PrayerRequestItem[]) => void,
   onError?: (error: any) => void
 ) {
   const requestsCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'prayer_requests');
-  const q = query(requestsCol, where('userId', '==', userId));
+  const normalizedEmail = (userEmail || '').toLowerCase().trim();
+  const isJabuOrDev =
+    normalizedEmail === 'jabuobed1@gmail.com' ||
+    normalizedEmail === 'bakayise.developers@gmail.com';
 
   return onSnapshot(
-    q,
+    requestsCol,
     (snapshot) => {
       const items: PrayerRequestItem[] = [];
       snapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...(docSnap.data() as any) });
+        const r = { id: docSnap.id, ...(docSnap.data() as any) } as PrayerRequestItem;
+        const authorEmail = (r.authorEmail || '').toLowerCase().trim();
+        const sharedEmails = (r.sharedWithEmails || []).map((e) => e.toLowerCase().trim());
+        const sharedUids = r.sharedWithUserIds || [];
+
+        const isOwner =
+          r.userId === userId ||
+          (Boolean(normalizedEmail) && authorEmail === normalizedEmail);
+
+        // Strict prayer privacy: If marked private, ONLY the owner can ever view it
+        const isSharedWithUser =
+          !r.isPrivate &&
+          ((Boolean(normalizedEmail) && sharedEmails.includes(normalizedEmail)) ||
+            sharedUids.includes(userId));
+
+        const isLegacyUnassigned =
+          !r.authorEmail || r.userId === 'guest_user' || !r.userId;
+
+        let hasAccess = false;
+        if (isOwner) {
+          hasAccess = true;
+        } else if (isSharedWithUser) {
+          hasAccess = true;
+        } else if (isLegacyUnassigned && isJabuOrDev) {
+          hasAccess = true;
+        }
+
+        if (hasAccess) {
+          items.push(r);
+        }
       });
       // Sort newest created first
       items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
@@ -178,7 +212,6 @@ export function subscribeToPersonPrayerRequests(
   const requestsCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'prayer_requests');
   const q = query(
     requestsCol,
-    where('userId', '==', userId),
     where('personId', '==', personId)
   );
 
@@ -228,6 +261,9 @@ export async function logPrayerSession(
     prayerSessions: updatedSessions,
     prayersCount: updatedCount,
     lastPrayedAt: session.timestamp,
+    lastPrayedBy: session.prayedBy,
+    lastPrayedByEmail: session.prayedByEmail,
+    lastPrayedByRole: session.prayedByRole,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -249,4 +285,49 @@ export async function updatePrayerStatus(
     answerTestimony: answerTestimony ?? currentRequest.answerTestimony,
     updatedAt: new Date().toISOString(),
   });
+}
+
+/**
+ * Migrates legacy records without isPrivate or authorEmail for the current user
+ */
+export async function migrateLegacyPrayerData(userId: string, userEmail?: string): Promise<void> {
+  if (!userId || userId === 'guest_user') return;
+  try {
+    const peopleCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'people');
+    const q = query(peopleCol, where('userId', '==', userId));
+    const snap = await getDocs(q);
+    
+    for (const d of snap.docs) {
+      const data = d.data() as Record<string, any>;
+      const updates: Record<string, any> = {};
+      if (!data.authorEmail && userEmail) {
+        updates.authorEmail = userEmail.toLowerCase().trim();
+      }
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(d.ref, updates);
+      }
+    }
+
+    // Also migrate prayer requests to ensure privacy flags are properly set
+    const requestsCol = collection(db, 'apps', PRAYER_JOURNAL_APP_ID, 'prayer_requests');
+    const reqQuery = query(requestsCol, where('userId', '==', userId));
+    const reqSnap = await getDocs(reqQuery);
+
+    for (const d of reqSnap.docs) {
+      const data = d.data() as Record<string, any>;
+      const updates: Record<string, any> = {};
+      if (data.isPrivate === undefined) {
+        // If it had shared emails, keep shared; otherwise private
+        updates.isPrivate = !(data.sharedWithEmails && data.sharedWithEmails.length > 0);
+      }
+      if (!data.authorEmail && userEmail) {
+        updates.authorEmail = userEmail.toLowerCase().trim();
+      }
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(d.ref, updates);
+      }
+    }
+  } catch (err) {
+    console.warn('migrateLegacyPrayerData notice:', err);
+  }
 }
