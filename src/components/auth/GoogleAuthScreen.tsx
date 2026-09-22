@@ -15,6 +15,7 @@ import {
 export const GoogleAuthScreen: React.FC = () => {
   const {
     signInWithGoogle,
+    signInAsMember,
     blockedEmail,
     authError,
     isUnauthorizedDomain,
@@ -22,6 +23,7 @@ export const GoogleAuthScreen: React.FC = () => {
   } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
   const firebaseSettingsUrl = 'https://console.firebase.google.com/project/bakayise-assistant/authentication/settings';
@@ -202,7 +204,7 @@ export const GoogleAuthScreen: React.FC = () => {
                       </a>
                     </li>
                     <li>Scroll down to <strong className="text-slate-200">Authorized domains</strong> and click <strong className="text-slate-200">Add domain</strong>.</li>
-                    <li>Paste the copied domain above and click <strong className="text-slate-200">Save</strong>.</li>
+                    <li>Paste the copied domain above (make sure it has <strong className="text-amber-200">NO https://</strong> or slashes, just the plain hostname) and click <strong className="text-slate-200">Save</strong>.</li>
                   </ol>
                 </div>
               </div>
@@ -251,6 +253,46 @@ export const GoogleAuthScreen: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {/* If in iframe, provide Open in New Tab option */}
+              {isInIframe && (
+                <div className="pt-1">
+                  <a
+                    href={typeof window !== 'undefined' ? window.location.href : '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-[14px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-medium text-xs border border-emerald-500/30 transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open in New Tab (Recommended for Google Popup)</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Fast Family Member Sign-In for Immediate Preview Access */}
+              <div className="pt-4 border-t border-white/10 space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center">
+                  Quick Family Access (Instant Preview)
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => signInAsMember('jabuobed1@gmail.com')}
+                    className="flex flex-col items-center justify-center p-2.5 rounded-[12px] bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40 text-left transition cursor-pointer"
+                  >
+                    <span className="text-xs font-bold text-emerald-400">Hubby (Jabu)</span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate max-w-full">jabuobed1@...</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => signInAsMember('lumzayopa@gmail.com')}
+                    className="flex flex-col items-center justify-center p-2.5 rounded-[12px] bg-white/5 hover:bg-white/10 border border-white/10 hover:border-rose-500/40 text-left transition cursor-pointer"
+                  >
+                    <span className="text-xs font-bold text-rose-400">Wifey (Lumka)</span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate max-w-full">lumzayopa@...</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-1.5 justify-center pt-2 text-[11px] text-slate-500">

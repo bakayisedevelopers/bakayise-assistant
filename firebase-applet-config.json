@@ -3,7 +3,7 @@
   "appId": "1:363451915611:web:e016db0af3587a10e4ce7e",
   "apiKey": "AIzaSyAhQS6Y4_a8Zsk2NlTN9hSI-pXXVkJFZhk",
   "authDomain": "bakayise-assistant.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-bakayiseassistan-65f3c1e4-0445-47f2-b846-442355aea239",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "bakayise-assistant.firebasestorage.app",
   "messagingSenderId": "363451915611",
   "measurementId": "",
