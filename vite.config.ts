@@ -237,6 +237,321 @@ For each expense entry in "expenses":
           }
         });
       });
+
+      // In-memory cache for scripture
+      const scriptureCache = new Map<string, any>();
+
+      // Bible Scripture Lookup Endpoint (KJV, NKJV, NLT, AMP)
+      server.middlewares.use('/api/bible/lookup', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          return res.end('Method not allowed');
+        }
+
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const { reference, translation = 'kjv' } = JSON.parse(body || '{}');
+            const cleanRef = (reference || '').trim();
+            const cleanTrans = (translation || 'kjv').toLowerCase().trim();
+
+            if (!cleanRef) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ error: 'Scripture reference is required.' }));
+            }
+
+            const cacheKey = `${cleanRef.toLowerCase()}_${cleanTrans}`;
+            if (scriptureCache.has(cacheKey)) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify(scriptureCache.get(cacheKey)));
+            }
+
+            // 1. If KJV, try free public open-source bible-api.com first
+            if (cleanTrans === 'kjv') {
+              try {
+                const fetchUrl = `https://bible-api.com/${encodeURIComponent(cleanRef)}?translation=kjv`;
+                const abortCtrl = new AbortController();
+                const timeoutId = setTimeout(() => abortCtrl.abort(), 4000);
+                const apiRes = await fetch(fetchUrl, { signal: abortCtrl.signal });
+                clearTimeout(timeoutId);
+
+                if (apiRes.ok) {
+                  const data = await apiRes.json();
+                  if (data && data.text) {
+                    const cleanVerses = Array.isArray(data.verses)
+                      ? data.verses.map((v: any) => ({
+                          book_id: v.book_id || '',
+                          book_name: v.book_name || '',
+                          chapter: Number(v.chapter) || 1,
+                          verse: Number(v.verse) || 1,
+                          text: (v.text || '').trim().replace(/\s+/g, ' '),
+                        }))
+                      : [];
+
+                    const result = {
+                      reference: data.reference || cleanRef,
+                      text: data.text.trim().replace(/\s+/g, ' '),
+                      translation: 'King James Version (KJV)',
+                      translationId: 'kjv',
+                      verses: cleanVerses,
+                      versesCount: cleanVerses.length || 1,
+                    };
+                    scriptureCache.set(cacheKey, result);
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    return res.end(JSON.stringify(result));
+                  }
+                }
+              } catch (kjvErr) {
+                console.warn('bible-api.com KJV lookup note, using fallback:', kjvErr);
+              }
+            }
+
+            // 2. Authoritative scripture retrieval for NKJV, NLT, AMP, and fallback KJV
+            const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+            if (apiKey) {
+              const translationNames: Record<string, string> = {
+                kjv: 'King James Version (KJV)',
+                nkjv: 'New King James Version (NKJV)',
+                nlt: 'New Living Translation (NLT)',
+                amp: 'Amplified Bible (AMP)',
+              };
+              const transName = translationNames[cleanTrans] || 'New King James Version (NKJV)';
+
+              const ai = new GoogleGenAI({
+                apiKey,
+                httpOptions: {
+                  headers: {
+                    'User-Agent': 'aistudio-build',
+                  },
+                },
+              });
+
+              const prompt = `Provide the exact, authoritative, word-for-word scripture text for the following Bible reference.
+Translation: ${transName}
+Reference: "${cleanRef}"
+
+Return STRICTLY valid JSON matching this schema without Markdown formatting or code blocks:
+{
+  "reference": "${cleanRef}",
+  "text": "Full verse text here",
+  "translation": "${transName}",
+  "translationId": "${cleanTrans}",
+  "verses": [
+    {
+      "book_id": "ROM",
+      "book_name": "Romans",
+      "chapter": 8,
+      "verse": 14,
+      "text": "Verse text here"
+    }
+  ]
+}`;
+
+              let response;
+              try {
+                response = await ai.models.generateContent({
+                  model: 'gemini-3.1-flash-lite',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              } catch (primaryErr) {
+                console.warn('Primary model error, retrying with fallback:', primaryErr);
+                response = await ai.models.generateContent({
+                  model: 'gemini-flash-latest',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              }
+
+              if (response.text) {
+                let cleanJson = response.text.trim();
+                if (cleanJson.includes('```')) {
+                  cleanJson = cleanJson.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+                }
+                const parsed = JSON.parse(cleanJson);
+                scriptureCache.set(cacheKey, parsed);
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify(parsed));
+              }
+            }
+
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(
+              JSON.stringify({
+                error: `Could not retrieve scripture for "${cleanRef}" in translation ${cleanTrans.toUpperCase()}.`,
+              })
+            );
+          } catch (err: any) {
+            console.error('Error in /api/bible/lookup:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ error: err.message || 'Failed to fetch scripture' }));
+          }
+        });
+      });
+
+      // Bible Chapter Verses Endpoint (for browsing verses in KJV, NKJV, NLT, AMP)
+      server.middlewares.use('/api/bible/chapter', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          return res.end('Method not allowed');
+        }
+
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const { book, chapter, translation = 'kjv' } = JSON.parse(body || '{}');
+            const cleanBook = (book || '').trim();
+            const chapterNum = Number(chapter) || 1;
+            const cleanTrans = (translation || 'kjv').toLowerCase().trim();
+
+            if (!cleanBook) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ error: 'Bible book name is required.' }));
+            }
+
+            const cacheKey = `chap_${cleanBook.toLowerCase()}_${chapterNum}_${cleanTrans}`;
+            if (scriptureCache.has(cacheKey)) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify(scriptureCache.get(cacheKey)));
+            }
+
+            // 1. If KJV, try free public open-source bible-api.com
+            if (cleanTrans === 'kjv') {
+              try {
+                const fetchUrl = `https://bible-api.com/${encodeURIComponent(cleanBook + ' ' + chapterNum)}?translation=kjv`;
+                const abortCtrl = new AbortController();
+                const timeoutId = setTimeout(() => abortCtrl.abort(), 4000);
+                const apiRes = await fetch(fetchUrl, { signal: abortCtrl.signal });
+                clearTimeout(timeoutId);
+
+                if (apiRes.ok) {
+                  const data = await apiRes.json();
+                  if (data && Array.isArray(data.verses) && data.verses.length > 0) {
+                    const cleanVerses = data.verses.map((v: any) => ({
+                      book_id: v.book_id || cleanBook.substring(0, 3).toUpperCase(),
+                      book_name: v.book_name || cleanBook,
+                      chapter: Number(v.chapter) || chapterNum,
+                      verse: Number(v.verse) || 1,
+                      text: (v.text || '').trim().replace(/\s+/g, ' '),
+                    }));
+                    const result = { verses: cleanVerses };
+                    scriptureCache.set(cacheKey, result);
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    return res.end(JSON.stringify(result));
+                  }
+                }
+              } catch (kjvErr) {
+                console.warn('bible-api.com KJV chapter lookup note, using fallback:', kjvErr);
+              }
+            }
+
+            // 2. Fetch chapter verses for NKJV, NLT, AMP, and fallback KJV
+            const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+            if (apiKey) {
+              const translationNames: Record<string, string> = {
+                kjv: 'King James Version (KJV)',
+                nkjv: 'New King James Version (NKJV)',
+                nlt: 'New Living Translation (NLT)',
+                amp: 'Amplified Bible (AMP)',
+              };
+              const transName = translationNames[cleanTrans] || 'New King James Version (NKJV)';
+
+              const ai = new GoogleGenAI({
+                apiKey,
+                httpOptions: {
+                  headers: {
+                    'User-Agent': 'aistudio-build',
+                  },
+                },
+              });
+
+              const prompt = `Provide all the verses for chapter ${chapterNum} of the book of ${cleanBook} in the ${transName}.
+Ensure high biblical accuracy, correct verse numbers in sequential order (1, 2, 3...), and exact wording for the ${transName}.
+
+Return STRICTLY a JSON object matching this schema without Markdown wrapping:
+{
+  "verses": [
+    {
+      "book_id": "${cleanBook.substring(0, 3).toUpperCase()}",
+      "book_name": "${cleanBook}",
+      "chapter": ${chapterNum},
+      "verse": 1,
+      "text": "Exact verse text here"
+    }
+  ]
+}`;
+
+              let response;
+              try {
+                response = await ai.models.generateContent({
+                  model: 'gemini-3.1-flash-lite',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              } catch (primaryErr) {
+                console.warn('Primary model error, retrying with fallback:', primaryErr);
+                response = await ai.models.generateContent({
+                  model: 'gemini-flash-latest',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              }
+
+              if (response.text) {
+                let cleanJson = response.text.trim();
+                if (cleanJson.includes('```')) {
+                  cleanJson = cleanJson.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+                }
+                const parsed = JSON.parse(cleanJson);
+                if (parsed && Array.isArray(parsed.verses)) {
+                  scriptureCache.set(cacheKey, parsed);
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  return res.end(JSON.stringify(parsed));
+                }
+              }
+            }
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ verses: [] }));
+          } catch (err: any) {
+            console.error('Error in /api/bible/chapter:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ error: err.message || 'Failed to fetch chapter' }));
+          }
+        });
+      });
     },
   };
 }

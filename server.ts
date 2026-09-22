@@ -769,20 +769,38 @@ Return STRICTLY valid JSON matching this schema without Markdown formatting:
   ]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
+              let response;
+              try {
+                response = await ai.models.generateContent({
+                  model: 'gemini-3.1-flash-lite',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              } catch (primaryErr) {
+                console.warn('Primary model error, retrying with fallback:', primaryErr);
+                response = await ai.models.generateContent({
+                  model: 'gemini-flash-latest',
+                  contents: prompt,
+                  config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1,
+                  },
+                });
+              }
 
-      if (response.text) {
-        const parsed = JSON.parse(response.text);
-        scriptureCache.set(cacheKey, parsed);
-        return res.json(parsed);
-      }
+              if (response.text) {
+                let cleanJson = response.text.trim();
+                if (cleanJson.includes('```')) {
+                  cleanJson = cleanJson.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+                }
+                const parsed = JSON.parse(cleanJson);
+                scriptureCache.set(cacheKey, parsed);
+                return res.json(parsed);
+              }
+            }
     }
 
     // Fallback if no API key or unexpected response
@@ -877,17 +895,34 @@ Return STRICTLY a JSON object matching this schema without Markdown wrapping:
   ]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+          },
+        });
+      } catch (primaryErr) {
+        console.warn('Primary model error, retrying with fallback:', primaryErr);
+        response = await ai.models.generateContent({
+          model: 'gemini-flash-latest',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+          },
+        });
+      }
 
       if (response.text) {
-        const parsed = JSON.parse(response.text);
+        let cleanJson = response.text.trim();
+        if (cleanJson.includes('```')) {
+          cleanJson = cleanJson.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+        }
+        const parsed = JSON.parse(cleanJson);
         if (parsed && Array.isArray(parsed.verses)) {
           scriptureCache.set(cacheKey, parsed);
           return res.json(parsed);
