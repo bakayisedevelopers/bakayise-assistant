@@ -156,6 +156,22 @@ export function subscribeToAllUserPrayerRequests(
   const isJabuOrDev =
     normalizedEmail === 'jabuobed1@gmail.com' ||
     normalizedEmail === 'bakayise.developers@gmail.com';
+  const isWifey =
+    normalizedEmail === 'lumzayopa@gmail.com' ||
+    normalizedEmail === 'lumazyopa@gmail.com';
+
+  const matchesEmail = (targetList: string[]) => {
+    if (!normalizedEmail) return false;
+    if (targetList.includes(normalizedEmail)) return true;
+    if (
+      isWifey &&
+      (targetList.includes('lumzayopa@gmail.com') ||
+        targetList.includes('lumazyopa@gmail.com'))
+    ) {
+      return true;
+    }
+    return false;
+  };
 
   return onSnapshot(
     requestsCol,
@@ -168,14 +184,12 @@ export function subscribeToAllUserPrayerRequests(
         const sharedUids = r.sharedWithUserIds || [];
 
         const isOwner =
-          r.userId === userId ||
+          (Boolean(userId) && r.userId === userId && userId !== 'guest_user') ||
           (Boolean(normalizedEmail) && authorEmail === normalizedEmail);
 
-        // Strict prayer privacy: If marked private, ONLY the owner can ever view it
-        const isSharedWithUser =
-          !r.isPrivate &&
-          ((Boolean(normalizedEmail) && sharedEmails.includes(normalizedEmail)) ||
-            sharedUids.includes(userId));
+        // A request is shared if the user is explicitly in sharedEmails or sharedWithUserIds
+        const isExplicitlyShared =
+          matchesEmail(sharedEmails) || sharedUids.includes(userId);
 
         const isLegacyUnassigned =
           !r.authorEmail || r.userId === 'guest_user' || !r.userId;
@@ -183,7 +197,7 @@ export function subscribeToAllUserPrayerRequests(
         let hasAccess = false;
         if (isOwner) {
           hasAccess = true;
-        } else if (isSharedWithUser) {
+        } else if (isExplicitlyShared) {
           hasAccess = true;
         } else if (isLegacyUnassigned && isJabuOrDev) {
           hasAccess = true;

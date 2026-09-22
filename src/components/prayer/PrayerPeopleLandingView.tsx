@@ -52,11 +52,28 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
   const isJabuOrDev =
     normalizedUserEmail === 'jabuobed1@gmail.com' ||
     normalizedUserEmail === 'bakayise.developers@gmail.com';
+  const isWifey =
+    normalizedUserEmail === 'lumzayopa@gmail.com' ||
+    normalizedUserEmail === 'lumazyopa@gmail.com';
+
+  const matchesUserEmail = (targetList: string[]) => {
+    if (!normalizedUserEmail) return false;
+    if (targetList.includes(normalizedUserEmail)) return true;
+    if (
+      isWifey &&
+      (targetList.includes('lumzayopa@gmail.com') ||
+        targetList.includes('lumazyopa@gmail.com'))
+    ) {
+      return true;
+    }
+    return false;
+  };
 
   // Strict visibility rule:
   // A person is visible to the logged-in user IF AND ONLY IF:
   // 1. The logged-in user created this person (or legacy unassigned records for Jabu/dev).
-  // 2. The person has at least ONE prayer request shared with the logged-in user.
+  // 2. The person is directly shared with the user (via person.sharedWithEmails or linkedSpouseEmail).
+  // 3. The person has at least ONE prayer request shared with the logged-in user.
   const visiblePeople = useMemo(() => {
     return people.filter((p) => {
       const authorEmail = (p.authorEmail || '').toLowerCase().trim();
@@ -69,21 +86,27 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
 
       if (isAuthor) return true;
 
-      // 2. Has at least one prayer request shared with this user
+      // 2. Direct Person Sharing Check
+      const personSharedEmails = (p.sharedWithEmails || []).map((e) => e.toLowerCase().trim());
+      const personSharedUids = p.sharedWithUserIds || [];
+      const isPersonDirectlyShared =
+        matchesUserEmail(personSharedEmails) ||
+        personSharedUids.includes(currentUserId) ||
+        (Boolean(p.linkedSpouseEmail) && matchesUserEmail([p.linkedSpouseEmail!.toLowerCase().trim()]));
+
+      if (isPersonDirectlyShared) return true;
+
+      // 3. Has at least one prayer request shared with this user
       const hasSharedPrayer = allRequests.some((r) => {
         if (r.personId !== p.id) return false;
-        if (r.isPrivate) return false;
         const sharedEmails = (r.sharedWithEmails || []).map((e) => e.toLowerCase().trim());
         const sharedUids = r.sharedWithUserIds || [];
-        return (
-          (Boolean(normalizedUserEmail) && sharedEmails.includes(normalizedUserEmail)) ||
-          sharedUids.includes(currentUserId)
-        );
+        return matchesUserEmail(sharedEmails) || sharedUids.includes(currentUserId);
       });
 
       return hasSharedPrayer;
     });
-  }, [people, allRequests, normalizedUserEmail, currentUserId, isJabuOrDev]);
+  }, [people, allRequests, normalizedUserEmail, currentUserId, isJabuOrDev, isWifey]);
 
   // Derive request counts and prayer counts per person
   const personStats = useMemo(() => {
