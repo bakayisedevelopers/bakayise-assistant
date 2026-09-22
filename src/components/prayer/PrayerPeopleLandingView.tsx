@@ -19,6 +19,11 @@ import {
   PrayerRequestItem,
 } from '../../types';
 import { AddEditPersonModal } from './AddEditPersonModal';
+import {
+  getPrayerPersonIds,
+  isMultiPersonPrayer,
+  isPrayerForPerson,
+} from '../../utils/prayerRequestPeople';
 
 interface PrayerPeopleLandingViewProps {
   people: PrayerPerson[];
@@ -98,7 +103,7 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
 
       // 3. Has at least one prayer request shared with this user
       const hasSharedPrayer = allRequests.some((r) => {
-        if (r.personId !== p.id) return false;
+        if (!isPrayerForPerson(r, p.id)) return false;
         const sharedEmails = (r.sharedWithEmails || []).map((e) => e.toLowerCase().trim());
         const sharedUids = r.sharedWithUserIds || [];
         return matchesUserEmail(sharedEmails) || sharedUids.includes(currentUserId);
@@ -123,24 +128,26 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
     > = {};
 
     for (const r of allRequests) {
-      if (!stats[r.personId]) {
-        stats[r.personId] = {
-          total: 0,
-          open: 0,
-          answered: 0,
-          prayersLogged: 0,
-        };
-      }
-      stats[r.personId].total += 1;
-      stats[r.personId].prayersLogged += (r.prayersCount || 0);
+      for (const personId of getPrayerPersonIds(r)) {
+        if (!stats[personId]) {
+          stats[personId] = {
+            total: 0,
+            open: 0,
+            answered: 0,
+            prayersLogged: 0,
+          };
+        }
+        stats[personId].total += 1;
+        stats[personId].prayersLogged += (r.prayersCount || 0);
 
-      if (r.status === 'open') stats[r.personId].open += 1;
-      if (r.status.startsWith('answered')) stats[r.personId].answered += 1;
+        if (r.status === 'open') stats[personId].open += 1;
+        if (r.status.startsWith('answered')) stats[personId].answered += 1;
 
-      if (r.lastPrayedAt) {
-        if (!stats[r.personId].lastPrayed || r.lastPrayedAt > (stats[r.personId].lastPrayed || '')) {
-          stats[r.personId].lastPrayed = r.lastPrayedAt;
-          stats[r.personId].lastPrayedBy = r.lastPrayedBy;
+        if (r.lastPrayedAt) {
+          if (!stats[personId].lastPrayed || r.lastPrayedAt > (stats[personId].lastPrayed || '')) {
+            stats[personId].lastPrayed = r.lastPrayedAt;
+            stats[personId].lastPrayedBy = r.lastPrayedBy;
+          }
         }
       }
     }
@@ -193,9 +200,10 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
       }
 
       if (selectedFilter === 'Shared') {
-        const personReqs = allRequests.filter((r) => r.personId === p.id);
+        const personReqs = allRequests.filter((r) => isPrayerForPerson(r, p.id));
         const hasShared = personReqs.some(
           (r) =>
+            isMultiPersonPrayer(r) ||
             (!r.isPrivate && r.sharedWithEmails && r.sharedWithEmails.length > 0) ||
             (Boolean(r.authorEmail) &&
               r.authorEmail?.toLowerCase().trim() !== normalizedUserEmail)
@@ -204,7 +212,7 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
       }
 
       if (selectedFilter === 'Private') {
-        const personReqs = allRequests.filter((r) => r.personId === p.id);
+        const personReqs = allRequests.filter((r) => isPrayerForPerson(r, p.id));
         const hasPrivate =
           personReqs.length === 0 ||
           personReqs.some(
@@ -368,7 +376,7 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
                 (Boolean(normalizedUserEmail) &&
                   person.authorEmail?.toLowerCase().trim() === normalizedUserEmail);
 
-              const personReqs = allRequests.filter((r) => r.personId === person.id);
+              const personReqs = allRequests.filter((r) => isPrayerForPerson(r, person.id));
               const sharedWithMeReqs = personReqs.filter(
                 (r) =>
                   Boolean(r.authorEmail) &&
@@ -380,6 +388,7 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
                   r.sharedWithEmails &&
                   r.sharedWithEmails.length > 0
               );
+              const multiPersonReqs = personReqs.filter(isMultiPersonPrayer);
 
               const isSpouseRelationship =
                 person.relationship === 'Husband' ||
@@ -530,6 +539,13 @@ export const PrayerPeopleLandingView: React.FC<PrayerPeopleLandingViewProps> = (
                           <Users className="w-2.5 h-2.5" />
                           <span>
                             {sharedByMeReqs.length} Shared with Spouse
+                          </span>
+                        </span>
+                      ) : multiPersonReqs.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-950/60 text-violet-300 border border-violet-500/30">
+                          <Users className="w-2.5 h-2.5" />
+                          <span>
+                            {multiPersonReqs.length} Shared Prayer{multiPersonReqs.length > 1 ? 's' : ''}
                           </span>
                         </span>
                       ) : (

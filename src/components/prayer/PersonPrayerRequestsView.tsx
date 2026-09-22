@@ -28,6 +28,7 @@ import { AddEditPersonModal } from './AddEditPersonModal';
 
 interface PersonPrayerRequestsViewProps {
   person: PrayerPerson;
+  people: PrayerPerson[];
   requests: PrayerRequestItem[];
   onBack: () => void;
   onSelectRequest: (requestId: string) => void;
@@ -79,6 +80,7 @@ const STATUS_BADGE: Record<
 
 export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> = ({
   person,
+  people,
   requests,
   onBack,
   onSelectRequest,
@@ -461,6 +463,7 @@ export const PersonPrayerRequestsView: React.FC<PersonPrayerRequestsViewProps> =
         }}
         onSaveRequest={onSaveRequest}
         person={person}
+        people={people}
         initialRequest={editingRequest}
         currentUserId={currentUserId}
         currentUserEmail={currentUserEmail}

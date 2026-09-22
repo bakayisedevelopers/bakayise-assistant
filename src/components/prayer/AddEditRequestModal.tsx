@@ -27,6 +27,7 @@ interface AddEditRequestModalProps {
   onClose: () => void;
   onSaveRequest: (req: PrayerRequestItem) => Promise<void> | void;
   person: PrayerPerson;
+  people?: PrayerPerson[];
   initialRequest?: PrayerRequestItem | null;
   currentUserId: string;
   currentUserEmail?: string;
@@ -46,6 +47,7 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
   onClose,
   onSaveRequest,
   person,
+  people = [],
   initialRequest,
   currentUserId,
   currentUserEmail,
@@ -58,6 +60,7 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
   const [notes, setNotes] = useState('');
   const [isPrivate, setIsPrivate] = useState(true);
   const [sharedWithEmails, setSharedWithEmails] = useState<string[]>([]);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([person.id]);
   const [customEmailInput, setCustomEmailInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [isScriptureModalOpen, setIsScriptureModalOpen] = useState(false);
@@ -79,6 +82,9 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
       setStatus(initialRequest.status || 'open');
       setScriptures(initialRequest.scriptures || []);
       setNotes(initialRequest.notes || '');
+      setSelectedPersonIds(
+        Array.from(new Set([initialRequest.personId, ...(initialRequest.personIds || [])].filter(Boolean)))
+      );
       const shared = (initialRequest.sharedWithEmails || []).map((e) =>
         e.toLowerCase().trim()
       );
@@ -97,8 +103,9 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
       setIsPrivate(true);
       setSharedWithEmails([]);
       setCustomEmailInput('');
+      setSelectedPersonIds([person.id]);
     }
-  }, [initialRequest, isOpen]);
+  }, [initialRequest, isOpen, person.id]);
 
   if (!isOpen) return null;
 
@@ -132,7 +139,7 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || selectedPersonIds.length === 0) return;
 
     setSaving(true);
     try {
@@ -147,6 +154,7 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
           : `prayer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         personId: person.id,
         personName: person.name,
+        personIds: selectedPersonIds,
         userId: initialRequest ? initialRequest.userId : currentUserId,
         authorEmail: initialRequest ? initialRequest.authorEmail || currentUserEmail : currentUserEmail,
         authorName: initialRequest ? initialRequest.authorName || currentUserName : currentUserName,
@@ -210,6 +218,61 @@ export const AddEditRequestModal: React.FC<AddEditRequestModalProps> = ({
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
+            {/* People this prayer is about */}
+            <div className="p-3.5 rounded-xl bg-[#0F0E20] border border-violet-500/20 space-y-2.5">
+              <div>
+                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-violet-400" />
+                  <span>People Included in This Prayer</span>
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  This same prayer will appear under every selected person.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {people
+                  .filter((candidate) =>
+                    candidate.id === person.id ||
+                    candidate.userId === currentUserId ||
+                    selectedPersonIds.includes(candidate.id)
+                  )
+                  .map((candidate) => {
+                    const selected = selectedPersonIds.includes(candidate.id);
+                    return (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setSelectedPersonIds((current) =>
+                            selected
+                              ? current.filter((id) => id !== candidate.id)
+                              : [...current, candidate.id]
+                          );
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] transition-colors ${
+                          selected
+                            ? 'bg-violet-600/30 border-violet-400/50 text-white'
+                            : 'bg-black/25 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span
+                          className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                          style={{ backgroundColor: candidate.avatarColor || '#8B5CF6' }}
+                        >
+                          {candidate.name.charAt(0).toUpperCase()}
+                        </span>
+                        {candidate.name}
+                        {selected && <Check className="w-3 h-3 text-emerald-300" />}
+                      </button>
+                    );
+                  })}
+              </div>
+              {selectedPersonIds.length === 0 && (
+                <p className="text-[10px] text-rose-300">Select at least one person.</p>
+              )}
+            </div>
+
             {/* Title */}
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
