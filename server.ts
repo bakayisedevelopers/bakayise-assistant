@@ -801,7 +801,6 @@ Return STRICTLY valid JSON matching this schema without Markdown formatting:
                 return res.json(parsed);
               }
             }
-    }
 
     // Fallback if no API key or unexpected response
     return res.status(404).json({

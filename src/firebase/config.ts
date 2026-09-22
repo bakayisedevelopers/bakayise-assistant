@@ -11,12 +11,11 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 const rawDbId = firebaseConfig.firestoreDatabaseId;
-// Ensure default Firestore database for bakayise-assistant
+// Connect to named database instance or default if unspecified
 const isDefaultDb =
   !rawDbId ||
   rawDbId === '(default)' ||
-  rawDbId.trim() === '' ||
-  rawDbId.startsWith('ai-studio-');
+  rawDbId.trim() === '';
 
 // Connect to default Firestore database or named database instance
 export const db =
